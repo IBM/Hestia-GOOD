@@ -91,7 +91,7 @@ class SimArguments:
             self.sim_function = (sim_function if sim_function is not None
                                  else 'cosine-np')
             self.query_embds = query_embds
-            self.target_embds = query_embds if target_embds is None else 
+            self.target_embds = query_embds if target_embds is None else target_embds
         else:
             raise NotImplementedError(f"Data type: {data_type} not implemented.")
 
