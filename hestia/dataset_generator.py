@@ -491,10 +491,10 @@ class HestiaGenerator:
             sim_metadata = None
         else:
             sim_metadata = vars(sim_args)
-            if sim_args.data_type == 'embedding':
+            if 'query_embds' in sim_metadata:
                 del sim_metadata['query_embds']
-                if 'target_embds' in sim_metadata:
-                    del sim_metadata['target_embds']
+            if 'target_embds' in sim_metadata:
+                del sim_metadata['target_embds']
 
         self.metadata = {
             'partition_algorithm': {
