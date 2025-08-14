@@ -91,13 +91,13 @@ class SimArguments:
             self.sim_function = (sim_function if sim_function is not None
                                  else 'cosine-np')
             self.query_embds = query_embds
-            self.target_embds = target_embds
+            self.target_embds = query_embds if target_embds is None else 
         else:
             raise NotImplementedError(f"Data type: {data_type} not implemented.")
 
     def __str__(self):
         return str(self.__dict__)
-    
+
     def to_dict(self):
         return self.__dict__
 
@@ -291,7 +291,8 @@ class HestiaGenerator:
                 sim_function=sim_args.sim_function,
                 threads=sim_args.threads, threshold=sim_args.min_threshold,
                 save_alignment=sim_args.save_alignment,
-                filename=sim_args.filename
+                filename=sim_args.filename,
+                verbose=sim_args.verbose
             )
         if self.verbose:
             print('Similarity successfully calculated!')
@@ -405,8 +406,11 @@ class HestiaGenerator:
             )
         min_threshold = int(min_threshold * 100)
         threshold_step = int(threshold_step * 100)
+        pbar = range(min_threshold, 100, threshold_step)
+        if verbose > 1:
+            pbar = tqdm(pbar)
 
-        for th in tqdm(range(min_threshold, 100, threshold_step)):
+        for th in pbar:
             if partition_algorithm == 'ccpart':
                 train, test, clusters = ccpart(
                     self.data,
@@ -417,7 +421,6 @@ class HestiaGenerator:
                     sim_df=sim_df, verbose=verbose
                 )
                 th_parts = (train, test)
-                print(len(set(train) & set(test)))
             elif partition_algorithm == 'ccpart_random':
                 train, test, clusters = ccpart_random(
                     self.data,
