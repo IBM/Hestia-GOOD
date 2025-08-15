@@ -18,7 +18,7 @@ def generate_clusters(
     verbose: int = 0,
     cluster_algorithm: str = 'greedy_incremental',
     filter_smaller: Optional[bool] = True
-) -> pd.DataFrame:
+) -> np.ndarray:
     """Generates clusters from a DataFrame.
 
     :param df: DataFrame with entities to cluster.
@@ -48,20 +48,20 @@ def generate_clusters(
     :type cluster_algorithm: str, optional
     :raises NotImplementedError: Clustering algorithm is not supported
     :return: DataFrame with entities and the cluster they belong to.
-    :rtype: pd.DataFrame
+    :rtype: np.ndarray
     """
     start = time.time()
     if isinstance(sim_df, pl.DataFrame):
         sim_df = sim_df.to_pandas()
 
     if cluster_algorithm in ['greedy_incremental', 'CDHIT']:
-        cluster_df = _greedy_incremental_clustering(df, field_name, sim_df,
-                                                    threshold, verbose)
+        clusters = _greedy_incremental_clustering(df, field_name, sim_df,
+                                                  threshold, verbose)
     elif cluster_algorithm in ['greedy_cover_set']:
-        cluster_df = _greedy_cover_set(df, sim_df, threshold, verbose)
+        clusters = _greedy_cover_set(df, sim_df, threshold, verbose)
     elif cluster_algorithm in ['connected_components']:
-        cluster_df = _connected_components_clustering(df, sim_df, threshold,
-                                                      verbose, filter_smaller)
+        clusters = _connected_components_clustering(df, sim_df, threshold,
+                                                    verbose, filter_smaller)
     else:
         raise NotImplementedError(
             f'Clustering algorithm: {cluster_algorithm} is not supported'
@@ -69,7 +69,7 @@ def generate_clusters(
     if verbose > 2:
         print(f'Clustering has taken {time.time() - start:.3f} s to compute.')
 
-    return cluster_df
+    return clusters
 
 
 def _greedy_incremental_clustering(
@@ -78,7 +78,7 @@ def _greedy_incremental_clustering(
     sim_df: pd.DataFrame,
     threshold: float,
     verbose: int
-) -> pd.DataFrame:
+) -> np.ndarray:
     df['lengths'] = df[field_name].map(len)
     df.sort_values(by='lengths', ascending=False, inplace=True)
 
@@ -100,19 +100,14 @@ def _greedy_incremental_clustering(
         in_cluster = in_cluster.difference(clustered)
 
         for j in in_cluster:
-            clusters.append({
-                'cluster': i,
-                'member': j
-            })
+            clusters.append(i)
         clustered.update(in_cluster)
-
-    cluster_df = pd.DataFrame(clusters)
 
     if verbose > 1:
         print('Clustering has generated:',
-              f'{len(cluster_df.cluster.unique()):,d} clusters for',
-              f'{len(cluster_df):,} entities')
-    return cluster_df
+              f'{len(np.unique(clusters)):,d} clusters for',
+              f'{len(df):,} entities')
+    return np.array(clusters)
 
 
 def _greedy_cover_set(
@@ -120,7 +115,7 @@ def _greedy_cover_set(
     sim_df: pd.DataFrame,
     threshold: float,
     verbose: int
-) -> pd.DataFrame:
+) -> np.ndarray:
     def _find_connectivity(df, sim_df):
         neighbours = []
         for i in tqdm(df.index):
@@ -164,16 +159,14 @@ def _connected_components_clustering(
     threshold: float,
     verbose: int,
     filter_smaller: Optional[bool] = True
-) -> pd.DataFrame:
+) -> np.ndarray:
     matrix = sim_df2mtx(sim_df, len(df), len(df),
                         threshold=threshold,
                         filter_smaller=filter_smaller)
     n, labels = connected_components(matrix, directed=False,
                                      return_labels=True)
-    cluster_df = [{'cluster': labels[i],
-                   'member': i} for i in range(labels.shape[0])]
     if verbose > 2:
         print('Clustering has generated:',
               f'{n:,d} connected components for',
               f'{len(df):,} entities')
-    return pd.DataFrame(cluster_df)
+    return labels

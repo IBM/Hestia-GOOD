@@ -101,7 +101,7 @@ def _neighbour_analysis(
         intra_clust_nghbrs = num_nghbrs_in_clst[clst_idx]
         inter_clust_nghbrs = num_nghbrs_in_clst.sum() - intra_clust_nghbrs
         if inter_clust_nghbrs > 0:
-            E_f[qry] = inter_clust_nghbrs
+            E_f[qry] = inter_clust_nghbrs.item()
     return E_f
 
 

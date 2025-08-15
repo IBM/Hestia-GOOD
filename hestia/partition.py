@@ -95,15 +95,17 @@ def ccpart_random(
     labels = _discretizer(labels, n_bins=n_bins)
 
     # Generate cluster assignments
-    cluster_df = generate_clusters(df, field_name=field_name,
-                                   threshold=threshold,
-                                   verbose=verbose,
-                                   cluster_algorithm='connected_components',
-                                   sim_df=sim_df,
-                                   filter_smaller=filter_smaller)
+    clusters = generate_clusters(
+        df,
+        field_name=field_name,
+        threshold=threshold,
+        verbose=verbose,
+        cluster_algorithm='connected_components',
+        sim_df=sim_df,
+        filter_smaller=filter_smaller
+    )
 
-    partition_labs = cluster_df.cluster.to_numpy()
-    unique_parts, part_counts = np.unique(partition_labs, return_counts=True)
+    unique_parts, part_counts = np.unique(clusters, return_counts=True)
     # sorted_parts = unique_parts[np.argsort(part_counts)]
     np.random.seed(seed)
     np.random.shuffle(unique_parts)
@@ -114,14 +116,14 @@ def ccpart_random(
 
     # Precompute indices for test and valid partitions
     for part in unique_parts:
-        part_indices = np.where(partition_labs == part)[0]
+        part_indices = np.where(clusters == part)[0]
 
         if _balanced_labels(labels, part_indices, test, test_size, size):
             test.extend(part_indices)
 
     # Avoid test data points in valid set
     for part in unique_parts:
-        part_indices = np.where(partition_labs == part)[0]
+        part_indices = np.where(clusters == part)[0]
         remaining_indices = [i for i in part_indices if i not in test]
 
         if remaining_indices:
@@ -143,9 +145,9 @@ def ccpart_random(
         print(f'Warning: Proportion of validation partition is smaller than expected: {(len(valid) / size) * 100:.2f} %')
 
     if valid_size > 0:
-        return train, test, valid, partition_labs
+        return train, test, valid, clusters
     else:
-        return train, test, partition_labs
+        return train, test, clusters
 
 
 def ccpart(
@@ -201,15 +203,17 @@ def ccpart(
     labels = _discretizer(labels, n_bins=n_bins)
 
     # Generate cluster assignments
-    cluster_df = generate_clusters(df, field_name=field_name,
-                                   threshold=threshold,
-                                   verbose=verbose,
-                                   cluster_algorithm='connected_components',
-                                   sim_df=sim_df,
-                                   filter_smaller=filter_smaller)
+    clusters = generate_clusters(
+        df,
+        field_name=field_name,
+        threshold=threshold,
+        verbose=verbose,
+        cluster_algorithm='connected_components',
+        sim_df=sim_df,
+        filter_smaller=filter_smaller
+    )
 
-    partition_labs = cluster_df.cluster.to_numpy()
-    unique_parts, part_counts = np.unique(partition_labs, return_counts=True)
+    unique_parts, part_counts = np.unique(clusters, return_counts=True)
     sorted_parts = unique_parts[np.argsort(part_counts)]
 
     # Initialize empty lists for train, test, and valid sets
@@ -219,14 +223,14 @@ def ccpart(
 
     # Precompute indices for test and valid partitions
     for part in sorted_parts:
-        part_indices = np.where(partition_labs == part)[0]
+        part_indices = np.where(clusters == part)[0]
 
         if _balanced_labels(labels, part_indices, test, test_size, size):
             test.extend(part_indices)
 
     # Avoid test data points in valid set
     for part in sorted_parts:
-        part_indices = np.where(partition_labs == part)[0]
+        part_indices = np.where(clusters == part)[0]
         remaining_indices = [i for i in part_indices if i not in test]
 
         if remaining_indices:
@@ -248,9 +252,9 @@ def ccpart(
         print(f'Warning: Proportion of validation partition is smaller than expected: {(len(valid) / size) * 100:.2f} %')
 
     if valid_size > 0:
-        return train, test, valid, partition_labs
+        return train, test, valid, clusters
     else:
-        return train, test, partition_labs
+        return train, test, clusters
 
 
 def reduction_partition(
