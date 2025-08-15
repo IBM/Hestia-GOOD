@@ -433,7 +433,7 @@ class HestiaGenerator:
                 th_parts = (train, test)
             elif partition_algorithm == 'graph_part':
                 try:
-                    th_parts, clusters = graph_part(
+                    train, test, clusters = graph_part(
                         self.data,
                         label_name=label_name,
                         test_size=test_size if n_partitions is None else 0.0,
@@ -441,7 +441,7 @@ class HestiaGenerator:
                         sim_df=sim_df, verbose=2,
                         n_parts=n_partitions
                     )
-
+                    th_parts = (train, test)
                 except RuntimeError as e:
                     print(e)
                     continue
