@@ -24,7 +24,8 @@ def limited_agglomerative_clustering(
     mtx: spr.csc_matrix,
     n_parts: int,
     threshold: float,
-    labels: List[int]
+    labels: List[int],
+    verbose: int
 ) -> np.ndarray:
     mtx = mtx > threshold
     part_size = mtx.shape[0] // n_parts
@@ -50,7 +51,10 @@ def limited_agglomerative_clustering(
         }
         nx.set_node_attributes(graph, attributes)
 
-    for item in tqdm(sorted_data):
+    pbar = sorted_data
+    if verbose > 1:
+        pbar = tqdm(sorted_data)
+    for item in pbar:
         qry, tgt = rows[item], columns[item]
         if (graph.nodes[qry]['cluster'] == graph.nodes[tgt]['cluster'] or
             graph.nodes[qry]['size'] >= part_size or

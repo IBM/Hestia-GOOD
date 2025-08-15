@@ -438,12 +438,13 @@ class HestiaGenerator:
                         label_name=label_name,
                         test_size=test_size if n_partitions is None else 0.0,
                         threshold=th / 100,
-                        sim_df=sim_df, verbose=2,
-                        n_parts=n_partitions
+                        sim_df=sim_df, verbose=verbose,
+                        n_parts=n_partitions,
                     )
                     th_parts = (train, test)
                 except RuntimeError as e:
-                    print(e)
+                    if verbose > 1:
+                        print(e)
                     continue
 
             if n_partitions is None:

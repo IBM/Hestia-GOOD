@@ -12,7 +12,7 @@ from tqdm import tqdm
 import scipy.sparse as spr
 from concurrent.futures import ThreadPoolExecutor
 
-from hestia.utils import BULK_SIM_METRICS
+from .utils import BULK_SIM_METRICS, get_fp_function
 
 
 SUPPORTED_FPS = ['ecfp', 'mapc', 'maccs']
@@ -256,82 +256,8 @@ def molecular_similarity(
         'rogot-goldberg': BulkRogotGoldbergSimilarity,
         'cosine': BulkCosineSimilarity
     })
-
-    if fingerprint == 'ecfp':
-        fpgen = rdFingerprintGenerator.GetMorganGenerator(
-            radius=radius, fpSize=bits
-        )
-        def _get_fp(smile: str):
-            mol = Chem.MolFromSmiles(smile, sanitize=True)
-
-            if mol is None:
-                print(f"SMILES: `{smile}` could not be processed. Will be substituted by `C`")
-                return _get_fp("C")
-
-            if sim_function in ['dice', 'tanimoto', 'sokal', 'rogot-goldberg',
-                                'cosine']:
-                fp = fpgen.GetFingerprint(mol)
-            else:
-                fp = fpgen.GetFingerprintAsNumPy(mol).astype(np.int8)
-            return fp
-        if sim_function == 'jaccard':
-            print('Warning: jaccard similarity with ecfp fp substituted by tanimoto')
-            sim_function = 'tanimoto'
-
-    elif fingerprint == 'maccs':
-
-        def _get_fp(smile: str):
-            mol = Chem.MolFromSmiles(smile)
-            if mol is None:
-                print(f"SMILES: `{smile}` could not be processed. Will be substituted by `C`")
-                return _get_fp("C")
-
-            fp = rdMolDescriptors.GetMACCSKeysFingerprint(mol)
-            if sim_function in ['dice', 'tanimoto', 'sokal', 'rogot-goldberg',
-                                'cosine']:
-                return fp
-            else:
-                return np.array(fp)
-
-    elif fingerprint == 'mapc':
-        try:
-            from mapchiral.mapchiral import encode
-        except ModuleNotFoundError:
-            raise ImportError('This fingerprint requires mapchiral to be installed: `pip install mapchiral`')
-
-        def _get_fp(smile: str):
-            mol = Chem.MolFromSmiles(smile, sanitize=True)
-            if mol is None:
-                print(f"SMILES: `{smile}` could not be processed. Will be substituted by `C`")
-                return _get_fp("C")
-
-            fp = encode(mol, max_radius=radius,
-                        n_permutations=bits, mapping=False)
-            return fp
-
-        if sim_function != 'jaccard':
-            raise ValueError('MAPc can only be used with `jaccard`.')
-
-    elif fingerprint == 'lipinski':
-        import rdkit.Chem.Lipinski as Lip
-
-        def _get_fp(smiles: str):
-            fp = []
-            mol = Chem.MolFromSmiles(smiles, sanitize=True)
-            if mol is None:
-                print(f"SMILES: `{smiles}` could not be processed. Will be substituted by `C`")
-                return _get_fp("C")
-            fp.append(Lip.NumHAcceptors(mol))
-            fp.append(Lip.NumHDonors(mol))
-            fp.append(Lip.NumHeteroatoms(mol))
-            fp.append(Lip.NumRotatableBonds(mol))
-            fp.append(Lip.NumSaturatedCarbocycles(mol))
-            fp.append(Lip.RingCount(mol))
-
-            return np.array(fp)
-
-        if sim_function != 'canberra':
-            raise ValueError("Lipinski can only be used with sim_function='canberra'")
+    if 'ecfp' in fingerprint and sim_function == 'jaccard':
+        sim_function = 'tanimoto'
 
     if sim_function in BULK_SIM_METRICS:
         bulk_sim_metric = BULK_SIM_METRICS[sim_function]
@@ -341,12 +267,15 @@ def molecular_similarity(
             f"Supported metrics: {', '.join(BULK_SIM_METRICS.keys())}"
         )
 
+    fp_function = get_fp_function(fp=fingerprint, bits=bits,
+                                  radius=radius, sim_function=sim_function)
+
     def _parallel_fps(mols: List[str], mssg: str) -> list:
         fps = []
         jobs = []
         with ThreadPoolExecutor(max_workers=threads) as executor:
             for mol in mols:
-                job = executor.submit(_get_fp, mol)
+                job = executor.submit(fp_function, mol)
                 jobs.append(job)
             if verbose > 1:
                 pbar = tqdm(jobs, desc=mssg, unit_scale=True,

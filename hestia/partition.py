@@ -325,7 +325,7 @@ def graph_part(
     if n_parts is None:
         n_parts = 10
     clusters = limited_agglomerative_clustering(mtx, n_parts, threshold,
-                                                labels)
+                                                labels, verbose=verbose)
     cluster_inds, cluster_sizes = np.unique(clusters, return_counts=True)
     unique_labs, lab_counts = np.unique(labels, return_counts=True)
     n_labels = len(unique_labs)
@@ -353,7 +353,8 @@ def graph_part(
     mtx = mtx > threshold
     removed = np.ones(mtx.shape[0], dtype=np.int8) == 1
     i = 0
-    pbar = tqdm()
+    if verbose > 1:
+        pbar = tqdm()
     E_f = _neighbour_analysis(mtx, clusters)
     clus_labs, clusters_sizes = np.unique(clusters[removed],
                                           return_counts=True)
@@ -371,8 +372,9 @@ def graph_part(
             if verbose > 1:
                 mssg = f'Forbidden edges: {E_f.sum()} - Removed: '
                 mssg += f'{mtx.shape[0] - removed.sum():,}'
-                pbar.set_description(mssg)
-                pbar.update(1)
+                if verbose > 1:
+                    pbar.set_description(mssg)
+                    pbar.update(1)
 
         clus_labs, clusters_sizes = np.unique(re_clusters[removed],
                                               return_counts=True)
@@ -381,16 +383,14 @@ def graph_part(
             mssg += f'into {n_parts} partitions. '
             mssg += 'It leads to loss of a complete partition'
             raise RuntimeError(mssg)
-
-    pbar.close()
     if verbose > 1:
+        pbar.close()
         mssg = f'Number of entities removed: {mtx.shape[0] - removed.sum():,}'
         mssg += f' out of {mtx.shape[0]}'
         print(mssg)
 
     o_train, o_test, o_valid = [], [], []
     test_len, valid_len = 0, 0
-
 
     if test_size > 0.0:
         train, test = [], []
