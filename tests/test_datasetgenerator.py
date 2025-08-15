@@ -6,7 +6,7 @@ import pandas as pd
 from hestia import HestiaGenerator, SimArguments
 
 
-def test_partition():
+def test_hdg_ccpart():
     df = pd.read_csv(osp.join(osp.dirname(__file__), 'biogen_logS.csv'))
     hdg = HestiaGenerator(df)
     mol_args = SimArguments(
@@ -23,7 +23,35 @@ def test_partition():
         threshold_step=0.1,
         test_size=0.2,
         verbose=0,
-        valid_size=0.1
+        valid_size=0.1,
+        partition_algorithm='ccpart'
+    )
+
+    parts = hdg.get_partition('min', filter=0.185)
+    assert len(set(parts[1]['train']) & set(parts[1]['test'])) == 0
+    assert len(set(parts[1]['train']) & set(parts[1]['valid'])) == 0
+    assert len(set(parts[1]['valid']) & set(parts[1]['test'])) == 0
+
+
+def test_hdg_graphpart():
+    df = pd.read_csv(osp.join(osp.dirname(__file__), 'biogen_logS.csv'))
+    hdg = HestiaGenerator(df)
+    mol_args = SimArguments(
+        data_type='small molecule',
+        field_name='SMILES',
+        fingeprint='ecfp',
+        radius=2,
+        bits=2048,
+        verbose=0
+    )
+    hdg.calculate_partitions(
+        sim_args=mol_args,
+        min_threshold=0.1,
+        threshold_step=0.1,
+        test_size=0.2,
+        verbose=0,
+        valid_size=0.1,
+        partition_algorithm='graph_part'
     )
 
     parts = hdg.get_partition('min', filter=0.185)
