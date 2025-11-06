@@ -118,7 +118,11 @@ def _greedy_cover_set(
 ) -> np.ndarray:
     def _find_connectivity(df, sim_df):
         neighbours = []
-        for i in tqdm(df.index):
+        if verbose > 2:
+            pbar = tqdm(df.index)
+        else:
+            pbar = df.index
+        for i in pbar:
             in_cluster = set(sim_df.loc[sim_df['query'] == i, 'target'])
             in_cluster.update(set(sim_df.loc[sim_df['target'] == i, 'query']))
             neighbours.append(in_cluster)
