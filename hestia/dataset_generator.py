@@ -15,7 +15,8 @@ from hestia.similarity import (sequence_similarity_mmseqs,
                                embedding_similarity,
                                protein_structure_similarity)
 from hestia.partition import (train_test_split, ccpart, ccpart_random,
-                              graph_part, random_partition)
+                              graph_part, random_partition, umap_original,
+                              sim_umap, scaffold, butina, bitbirch)
 
 
 class SimArguments:
@@ -358,6 +359,8 @@ class HestiaGenerator:
                                 - `'graph_part'`: GraphPart partitioning.
                                 - `'ccpart_random'`: Connected components algorithm that puts in testing
                                 random clusters.
+                                - `'sim_umap'`: Similarity matrix UMAP.
+                                - `'butina'`: Butina working on similarity matrices.
                                 Defaults to `'ccpart'`.
         :type partition_algorithm: Optional[str], optional
         :param random_state: The random seed for reproducibility. Defaults to 42.
@@ -446,7 +449,45 @@ class HestiaGenerator:
                     if verbose > 1:
                         print(e)
                     continue
-
+            elif partition_algorithm == 'butina':
+                try:
+                    train, test, clusters = butina(
+                        self.data,
+                        sim_df=sim_df,
+                        label_name=label_name,
+                        test_size=test_size,
+                        threshold=th / 100,
+                        verbose=verbose,
+                        n_bins=20
+                    )
+                    th_parts = (train, test)
+                except RuntimeError as e:
+                    if verbose > 1:
+                        print(e)
+                    continue
+            elif partition_algorithm == 'sim_umap':
+                try:
+                    train, test, clusters = sim_umap(
+                        self.data,
+                        sim_df=sim_df,
+                        label_name=label_name,
+                        test_size=test_size,
+                        threshold=th / 100,
+                        verbose=verbose,
+                        n_bins=20
+                    )
+                    th_parts = (train, test)
+                except RuntimeError as e:
+                    if verbose > 1:
+                        print(e)
+                continue
+            else:
+                raise NotImplementedError(
+                    f"Partitioning algorithm: {partition_algorithm} is not supported",
+                    "within the HestiaGenerator. Only algorithms that operate with",
+                    "similarity matrices are supported here. To use other algorithms",
+                    "(e.g., fingreprint-based ones) use the individual functions."
+                )
             if n_partitions is None:
                 if valid_size > 0.:
                     train_th_parts = train_test_split(
