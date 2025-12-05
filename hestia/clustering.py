@@ -60,12 +60,6 @@ def generate_clusters(
             clustering. Useful when clusters are better separated in embedded
             space than in raw feature or similarity space.
 
-        - `umap_cc`:
-            Applies UMAP dimensionality reduction, computes similarities in the
-            embedding space, and then clusters via connected components. Produces
-            finer local manifold-driven clusters compared to standard UMAP +
-            agglomerative clustering.
-
     :param df: DataFrame with entities to cluster.
     :type df: pd.DataFrame
     :param field_name: Name of the field with the entity information
@@ -91,7 +85,7 @@ def generate_clusters(
         - `connected_components`
         - `bitbirch`
         - `umap`
-        - `umap_cc`
+
     Defaults to "greedy_incremental".
     :type cluster_algorithm: str, optional
     :param filter_smaller: Whether to filter smaller indices when constructing
