@@ -35,7 +35,7 @@ setup(
     include_package_data=True,
     keywords='hestia',
     data_files=[('hestia/utils', ['hestia/utils/mmseqs_fake_prefilter.sh',
-                                  'auto-metrics.yml'])],
+                                  'hestia/utils/auto-metrics.yml'])],
     name='hestia-good',
     packages=find_packages(),
     long_description_content_type="text/markdown",
