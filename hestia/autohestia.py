@@ -515,8 +515,7 @@ class AutoHestia:
                 "and outputs an n x m np.ndarray where m is the dimensions of "
                 "the representation. "
                 "Available fingerprints are: "
-                f"``\n    - {'\n    - '.join([f+'-{radius}-{bits}'
-                                              for f in FPs])}\n``."
+                f"``\n    - {'\n    - '.join([f+'-{radius}-{bits}' for f in FPs])}\n``."
             )
         return x
 
