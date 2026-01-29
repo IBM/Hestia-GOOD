@@ -1,5 +1,7 @@
 import os
 import os.path as osp
+import shutil
+import sys
 
 from copy import deepcopy
 from datetime import datetime
@@ -7,6 +9,7 @@ from itertools import product
 from typing import Callable, Dict, List, Union
 
 import logging
+import numpy as np
 import pandas as pd
 import pickle
 import polars as pl
@@ -92,7 +95,8 @@ class TqdmHandler(logging.Handler):
             tqdm.write(msg)  # , file=sys.stderr)
             self.flush()
         except (KeyboardInterrupt, SystemExit):
-            raise
+            sys.exit(0)
+            raise KeyboardInterrupt
         except:
             self.handleError(record)
 
@@ -300,6 +304,15 @@ class AutoHestia:
         results_df.loc[1:, 'best'] = "N"
         results_df.to_csv(osp.join(self.outdir, "parts-results.tsv"),
                           index=False, sep="\t")
+        shutil.copy(osp.join(self.outdir, 'parts', f"{results_df.loc[0, 'part-alg']}-{results_df.loc[0, 'metric']}.pckl"),
+                             osp.join(self.outdir, 'best-partition.pckl'))
+        return pickle.load(open(osp.join(self.outdir, 'best-partition.pckl'), 'rb'))
+
+    def run_good(self):
+        self.logger.info("** Running AutoHestia **")
+        self.logger.info("1 - Representing data")
+        self.x = self._represent_data()
+        self.y = self.df[self.label_name].to_numpy()
 
     def _eval_sim_parts(self) -> List[dict]:
         model = self._get_model()
@@ -331,8 +344,8 @@ class AutoHestia:
                         'th': th / 100
                     }
                     cparts = {
-                        'train': cparts[0],
-                        'test': cparts[1]
+                        'train': np.array(cparts[0]),
+                        'test': np.array(cparts[1])
                     }
                     if len(cparts['test']) >= 0.185 * len(self.df):
                         break
@@ -356,7 +369,7 @@ class AutoHestia:
 
             # Butina eval
             if 'butina' in self.algorithms:
-                mdl = deepcopy(mdl)
+                mdl = deepcopy(model)
 
                 for th in range(10, 100, 10):
                     bparts = butina(
@@ -371,12 +384,11 @@ class AutoHestia:
                         'th': th / 100
                     }
                     bparts = {
-                        'train': bparts[0],
-                        'test': bparts[1]
+                        'train': np.array(bparts[0]),
+                        'test': np.array(bparts[1])
                     }
                     if len(bparts['test']) >= 0.185 * len(self.df):
                         break
-
                 bparts_file = osp.join(self.outdir, 'parts',
                                        f'ccpart-{metric_name}.pckl')
                 pickle.dump(bparts, open(bparts_file, 'wb'))
@@ -427,8 +439,8 @@ class AutoHestia:
                     'n_clus': n_clus
                 }
                 parts = {
-                    'train': parts[0],
-                    'test': parts[1]
+                    'train': np.array(parts[0]),
+                    'test': np.array(parts[1])
                 }
                 if len(parts['test']) >= 0.185 * len(self.df):
                     break
@@ -557,13 +569,15 @@ if __name__ == '__main__':
     )
     df = df[~df['SMILES'].isna()].reset_index(drop=True)
     hestia = AutoHestia(
-        df=df,
+        df=df.iloc[:100],
         field_name='SMILES',
         label_name='logS',
         task_type='regression',
         data_type='molecule',
-        # algorithms=['umap'],
+        algorithms=['butina', 'umap'],
         representation='ecfp-4',
         verbose_level='debug'
     )
-    hestia.run()
+    out = hestia.run()
+
+    print(out)
