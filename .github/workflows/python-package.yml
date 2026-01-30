@@ -29,8 +29,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install uv
         uv pip install . --system
-        uv pip install rdkit flake8 pytest mapchiral polars networkx autopeptideml --system
-        uv pip install transformers -U --system
+        uv pip install rdkit flake8 pytest mapchiral polars networkx autopeptideml "transformers<5.0.0" --system
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Lint with flake8
       run: |
