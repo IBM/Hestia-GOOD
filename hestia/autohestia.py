@@ -392,7 +392,7 @@ class AutoHestia:
                     if len(bparts['test']) >= 0.185 * len(self.df):
                         break
                 bparts_file = osp.join(self.outdir, 'parts',
-                                       f'ccpart-{metric_name}.pckl')
+                                       f'butina-{metric_name}.pckl')
                 pickle.dump(bparts, open(bparts_file, 'wb'))
                 mdl.fit(self.x[bparts['train']], self.y[bparts['train']])
                 if self.task_type == 'classification':
@@ -583,6 +583,6 @@ if __name__ == '__main__':
         representation='ecfp-4',
         verbose_level='debug'
     )
-    out = hestia.run()
+    out = hestia.run_good()
 
     print(out)
