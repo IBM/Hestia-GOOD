@@ -54,13 +54,15 @@ AVAILABLE_METRICS = yaml.safe_load(
     ), 'r')
 )
 
+algorithm_list = '\n    - '.join(AVAILABLE_ALGORITHMS.keys())
+metrics_list: str = '\n    - '.join(AVAILABLE_METRICS.keys())
 
 MESSAGE_NO_DATA_TYPE = f"""
 Data type: ``[data_type]`` not implemented.
 
 Available data types are:
     ``
-    - {'\n    - '.join([i for i in AVAILABLE_METRICS.keys()])}
+    - {metrics_list}
     ``
 
 If none of this suit your use case, please feel free to open
@@ -73,7 +75,7 @@ Algorithm: ``[algorithm]`` not implemented.
 
 Available algorithms are:
     ``
-    - {'\n    - '.join([i for i in AVAILABLE_ALGORITHMS.keys()])}
+    - {algorithm_list}
     ``
 If none of them suit your use case, you can add custom algorithms,
 through the ``add_custom_algorithm`` variable. It expects
