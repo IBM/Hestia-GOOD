@@ -1,4 +1,10 @@
 <div align="center">
+
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="https://ibm.github.io/Hestia-GOOD/imgs/hestiagood.png" height="250x">
+    <img alt="logo" src="https://ibm.github.io/Hestia-GOOD/imgs/hestiagood.png">
+  </picture>
+
   <h1>Hestia-GOOD</h1>
 
   <p>Computational tool for generating generalisation-evaluating evaluation sets.</p>
