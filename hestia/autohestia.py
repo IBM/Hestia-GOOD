@@ -56,7 +56,7 @@ AVAILABLE_METRICS = yaml.safe_load(
 
 algorithm_list = '\n    - '.join(AVAILABLE_ALGORITHMS.keys())
 metrics_list: str = '\n    - '.join(AVAILABLE_METRICS.keys())
-
+fingerprints_list = '\n    - '.join([f+'-{radius}-{bits}' for f in FPs])
 MESSAGE_NO_DATA_TYPE = f"""
 Data type: ``[data_type]`` not implemented.
 
@@ -521,6 +521,7 @@ class AutoHestia:
                 self.df[self.field_name].tolist()
             )
         else:
+            fingerprints_list = ""
             raise ValueError(
                 f"Representation: ``{self.rep}`` is not valid. "
                 "It should be either a string "
@@ -529,7 +530,9 @@ class AutoHestia:
                 "and outputs an n x m np.ndarray where m is the dimensions of "
                 "the representation. "
                 "Available fingerprints are: "
-                f"``\n    - {'\n    - '.join([f+'-{radius}-{bits}' for f in FPs])}\n``."
+                "``\n"
+                f"    - {fingerprints_list}"
+                "\n``."
             )
         return x
 
