@@ -18,7 +18,8 @@ def test_autohestia():
         task_type='regression',
         data_type='molecule',
         representation='ecfp-4',
-        verbose_level='debug'
+        verbose_level='debug',
+        outdir=osp.join(osp.dirname(osp.realpath(__file__)), 'test_autohestia')
     )
     out = hestia.run()
 
