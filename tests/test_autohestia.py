@@ -26,7 +26,7 @@ def test_autohestia():
     assert 'train' in out and 'test' in out
     assert isinstance(out, dict)
     assert isinstance(out['train'], np.ndarray)
-    assert osp.exists(osp.join(hestia.outdir, 'results.csv'))
+    assert osp.exists(osp.join(hestia.outdir, 'parts-results.tsv'))
     assert osp.exists(osp.join(hestia.outdir, 'parts', 'ccpart-molformer.pckl'))
     assert osp.exists(osp.join(hestia.outdir, 'parts', 'ccpart-ecfp-4-t.pckl'))
     assert osp.exists(osp.join(hestia.outdir, 'parts', 'ccpart-mapc-4-j.pckl'))
