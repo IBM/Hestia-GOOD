@@ -314,7 +314,7 @@ class AutoHestia:
         print(monotonicity_df)
         for (sim, alg), row in monotonicity_df.groupby(['metric', 'part-alg']):
             mask = (results_df['metric'] == sim) & (results_df['part-alg'] == alg)
-            results_df.loc[mask, 'rank'] = row.index + 1
+            results_df.loc[mask, 'rank'] = row.index.item() + 1
             results_df.loc[mask, 'monotonicity'] = row.monotonicity.item()
         results_df.loc[results_df['rank'].isna(), 'rank'] = k + 1
         results_df = results_df.sort_values('rank', ascending=True).reset_index(drop=True)
