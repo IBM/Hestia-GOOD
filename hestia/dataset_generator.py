@@ -315,7 +315,7 @@ class HestiaGenerator:
     def calculate_partitions(
         self,
         sim_args: Optional[SimArguments] = None,
-        sim_df: Optional[pd.DataFrame] = None,
+        sim_df: Optional[Union[pd.DataFrame, pl.DataFrame]] = None,
         label_name: Optional[str] = None,
         label_bins: Optional[int] = 10,
         min_threshold: Optional[float] = 0.,
@@ -329,7 +329,7 @@ class HestiaGenerator:
     ):
         """
         Calculates multiple partitions of a dataset for training, validation, and testing based on sequence similarity.
-        Supports two partitioning algorithms: `ccpart` and `graph_part`. Additionally, it computes partitions for 
+        Supports the following partitioning algorithms: `ccpart`, `graph_part`, and `butina`. Additionally, it computes partitions for 
         different similarity thresholds and random partitions.
 
         :param sim_args: Object containing the similarity parameters for partitioning. This includes options for 
@@ -402,10 +402,10 @@ class HestiaGenerator:
         if self.verbose:
             print('Calculating partitions...')
 
-        if partition_algorithm not in ['ccpart', 'graph_part', 'ccpart_random']:
+        if partition_algorithm not in ['ccpart', 'graph_part', 'butina', 'sim_umap']:
             raise ValueError(
                 f'Partition algorithm: {partition_algorithm} is not ' +
-                'supported. Try using: `ccpart`, `ccpart_random, or `graph_part`.'
+                'supported. Try using: `ccpart`, butina, or `graph_part`.'
             )
         min_threshold = int(min_threshold * 100)
         threshold_step = int(threshold_step * 100)
