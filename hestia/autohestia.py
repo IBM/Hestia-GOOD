@@ -287,7 +287,7 @@ class AutoHestia:
             self.seq_field_name = self.field_name
             self.field_name = 'hestia-smiles'
         elif self.data_type == 'canonical-peptide':
-            pipe = get_pipeline('to-sequence')
+            pipe = get_pipeline('to-sequences')
             self.df['hestia-seq'] = pipe(
                 self.df[self.field_name].tolist(),
                 n_jobs=n_jobs
