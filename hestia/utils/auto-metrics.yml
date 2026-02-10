@@ -1,155 +1,258 @@
 molecule:
   ecfp-2-t:
-      type: fp
-      sim_index: tanimoto
-      rep:
-          rep: ecfp
-          radius: 2
-          nbits: 1024
+    type: fp
+    sim_index: tanimoto
+    rep:
+      rep: ecfp
+      radius: 2
+      nbits: 1024
   ecfp-3-t:
-      type: fp
-      sim_index: tanimoto
-      rep:
-          rep: ecfp
-          radius: 3
-          nbits: 1024
+    type: fp
+    sim_index: tanimoto
+    rep:
+      rep: ecfp
+      radius: 3
+      nbits: 1024
   ecfp-4-t:
-      type: fp
-      sim_index: tanimoto
-      rep:
-          rep: ecfp
-          radius: 4
-          nbits: 1024
+    type: fp
+    sim_index: tanimoto
+    rep:
+      rep: ecfp
+      radius: 4
+      nbits: 1024
   ecfp-6-t:
-      type: fp
-      sim_index: tanimoto
-      rep:
-          rep: ecfp
-          radius: 6
-          nbits: 1024
+    type: fp
+    sim_index: tanimoto
+    rep:
+      rep: ecfp
+      radius: 6
+      nbits: 1024
   mapc-2-j:
-      type: fp
-      sim_index: jaccard
-      rep:
-          rep: mapc
-          radius: 2
-          nbits: 1024
+    type: fp
+    sim_index: jaccard
+    rep:
+      rep: mapc
+      radius: 2
+      nbits: 1024
   mapc-3-j:
-      type: fp
-      sim_index: jaccard
-      rep:
-          rep: mapc
-          radius: 3
-          nbits: 1024
+    type: fp
+    sim_index: jaccard
+    rep:
+      rep: mapc
+      radius: 3
+      nbits: 1024
   mapc-4-j:
-      type: fp
-      sim_index: jaccard
-      rep:
-          rep: mapc
-          radius: 4
-          nbits: 1024
+    type: fp
+    sim_index: jaccard
+    rep:
+      rep: mapc
+      radius: 4
+      nbits: 1024
   mapc-6-j:
-      type: fp
-      sim_index: jaccard
-      rep:
-          rep: mapc
-          radius: 6
-          nbits: 1024
+    type: fp
+    sim_index: jaccard
+    rep:
+      rep: mapc
+      radius: 6
+      nbits: 1024
   molformer:
-      type: lm
-      sim_index: euclidean
-      rep:
-          model: molformer-xl
+    type: lm
+    sim_index: euclidean
+    rep:
+      model: molformer-xl
 
 peptide:
   ecfp-3-t:
-      type: fp
-      sim_index: tanimoto
-      rep:
-          rep: ecfp
-          radius: 3
-          nbits: 1024
+    type: fp
+    sim_index: tanimoto
+    rep:
+      rep: ecfp
+      radius: 3
+      nbits: 1024
   ecfp-3-s:
-      type: fp
-      sim_index: sokal
-      rep:
-          rep: ecfp
-          radius: 3
-          nbits: 1024
+    type: fp
+    sim_index: sokal
+    rep:
+      rep: ecfp
+      radius: 3
+      nbits: 1024
   ecfp-4-t:
-      type: fp
-      sim_index: tanimoto
-      rep:
-          rep: ecfp
-          radius: 4
-          nbits: 1024
+    type: fp
+    sim_index: tanimoto
+    rep:
+      rep: ecfp
+      radius: 4
+      nbits: 1024
   ecfp-4-s:
-      type: fp
-      sim_index: sokal
-      rep:
-          rep: ecfp
-          radius: 4
-          nbits: 1024
+    type: fp
+    sim_index: sokal
+    rep:
+      rep: ecfp
+      radius: 4
+      nbits: 1024
   ecfp-6-t:
-      type: fp
-      sim_index: tanimoto
-      rep:
-          rep: ecfp
-          radius: 6
-          nbits: 1024
+    type: fp
+    sim_index: tanimoto
+    rep:
+      rep: ecfp
+      radius: 6
+      nbits: 1024
   ecfp-6-s:
-      type: fp
-      sim_index: sokal
-      rep:
-          rep: ecfp
-          radius: 6
-          nbits: 1024
+    type: fp
+    sim_index: sokal
+    rep:
+      rep: ecfp
+      radius: 6
+      nbits: 1024
   ecfp-8-t:
-      type: fp
-      sim_index: tanimoto
-      rep:
-          rep: ecfp
-          radius: 8
-          nbits: 1024
+    type: fp
+    sim_index: tanimoto
+    rep:
+      rep: ecfp
+      radius: 8
+      nbits: 1024
   ecfp-8-s:
-      type: fp
-      sim_index: sokal
-      rep:
-          rep: ecfp
-          radius: 8
-          nbits: 1024
+    type: fp
+    sim_index: sokal
+    rep:
+      rep: ecfp
+      radius: 8
+      nbits: 1024
 
   mapc-3-j:
-      type: fp
-      sim_index: jaccard
-      rep:
-          rep: mapc
-          radius: 3
-          nbits: 1024
+    type: fp
+    sim_index: jaccard
+    rep:
+      rep: mapc
+      radius: 3
+      nbits: 1024
   mapc-4-j:
-      type: fp
-      sim_index: jaccard
-      rep:
-          rep: mapc
-          radius: 4
-          nbits: 1024
+    type: fp
+    sim_index: jaccard
+    rep:
+      rep: mapc
+      radius: 4
+      nbits: 1024
   mapc-6-j:
-      type: fp
-      sim_index: jaccard
-      rep:
-          rep: mapc
-          radius: 6
-          nbits: 1024
+    type: fp
+    sim_index: jaccard
+    rep:
+      rep: mapc
+      radius: 6
+      nbits: 1024
   mapc-8-j:
-      type: fp
-      sim_index: jaccard
-      rep:
-          rep: mapc
-          radius: 8
-          nbits: 1024
+    type: fp
+    sim_index: jaccard
+    rep:
+      rep: mapc
+      radius: 8
+      nbits: 1024
 
   molformer:
-      type: lm
-      sim_index: euclidean
-      rep:
-          model: molformer-xl
+    type: lm
+    sim_index: euclidean
+    rep:
+      model: molformer-xl
+
+canonical-peptide:
+  ecfp-3-t:
+    type: fp
+    sim_index: tanimoto
+    rep:
+      rep: ecfp
+      radius: 3
+      nbits: 1024
+  ecfp-3-s:
+    type: fp
+    sim_index: sokal
+    rep:
+      rep: ecfp
+      radius: 3
+      nbits: 1024
+  ecfp-4-t:
+    type: fp
+    sim_index: tanimoto
+    rep:
+      rep: ecfp
+      radius: 4
+      nbits: 1024
+  ecfp-4-s:
+    type: fp
+    sim_index: sokal
+    rep:
+      rep: ecfp
+      radius: 4
+      nbits: 1024
+  ecfp-6-t:
+    type: fp
+    sim_index: tanimoto
+    rep:
+      rep: ecfp
+      radius: 6
+      nbits: 1024
+  ecfp-6-s:
+    type: fp
+    sim_index: sokal
+    rep:
+      rep: ecfp
+      radius: 6
+      nbits: 1024
+  ecfp-8-t:
+    type: fp
+    sim_index: tanimoto
+    rep:
+      rep: ecfp
+      radius: 8
+      nbits: 1024
+  ecfp-8-s:
+    type: fp
+    sim_index: sokal
+    rep:
+      rep: ecfp
+      radius: 8
+      nbits: 1024
+
+  mapc-3-j:
+    type: fp
+    sim_index: jaccard
+    rep:
+      rep: mapc
+      radius: 3
+      nbits: 1024
+  mapc-4-j:
+    type: fp
+    sim_index: jaccard
+    rep:
+      rep: mapc
+      radius: 4
+      nbits: 1024
+  mapc-6-j:
+    type: fp
+    sim_index: jaccard
+    rep:
+      rep: mapc
+      radius: 6
+      nbits: 1024
+  mapc-8-j:
+    type: fp
+    sim_index: jaccard
+    rep:
+      rep: mapc
+      radius: 8
+      nbits: 1024
+
+  molformer:
+    type: lm
+    sim_index: euclidean
+    rep:
+      model: molformer-xl
+
+  mmseqs2:
+    type: sequence
+    method: mmseqs
+
+  seq-esm2:
+    type: lm
+    sim_index: euclidean
+    rep:
+      model: esm2-8m
