@@ -16,6 +16,7 @@ import polars as pl
 import yaml
 
 try:
+    from autopeptideml.pipeline import get_pipeline
     from autopeptideml.reps import PLMs, CLMs, FPs
     from autopeptideml.reps.fps import RepEngineFP
     from autopeptideml.reps.lms import RepEngineLM
@@ -47,6 +48,7 @@ AVAILABLE_ALGORITHMS = {
 UMAP_FPS = {
     'molecule': ['ecfp-2', 'ecfp-3', 'ecfp-4', 'ecfp-6'],
     'peptide': ['ecfp-3', 'ecfp-4', 'ecfp-6', 'ecfp-8'],
+    'canonical-peptide': ['ecfp-3', 'ecfp-4', 'ecfp-6', 'ecfp-8'],
     'sequence': []
 }
 AVAILABLE_METRICS = yaml.safe_load(
@@ -274,6 +276,23 @@ class AutoHestia:
         self.logger.info(f"Number of threads: {self.njobs}")
         self.logger.info("")
 
+        if 'seq' in self.field_name:
+            self.logger.info("** Sequence data detected **")
+            self.logger.info("** Converting to SMILES **")
+            pipe = get_pipeline('to-smiles')
+            self.df['hestia-smiles'] = pipe(
+                self.df[self.field_name].tolist(),
+                n_jobs=n_jobs 
+            )
+            self.seq_field_name = self.field_name
+            self.field_name = 'hestia-smiles'
+        elif self.data_type == 'canonical-peptide':
+            pipe = get_pipeline('to-sequence')
+            self.df['hestia-seq'] = pipe(
+                self.df[self.field_name].tolist(),
+                n_jobs=n_jobs
+            )
+            self.seq_field_name = 'hestia-seq'
         # Save metadata
         os.makedirs(outdir, exist_ok=True)
         os.makedirs(osp.join(outdir, 'parts'), exist_ok=True)
@@ -454,6 +473,7 @@ class AutoHestia:
     #     return summary_df
 
     def _monotonicity_summary(self, results_df: pd.DataFrame):
+        print(results_df)
         results = []
         for (sim, alg), r_df in results_df.groupby(['metric', 'part-alg']):
             corr, p = spearmanr(r_df['th'], r_df[self.metric])
@@ -481,7 +501,8 @@ class AutoHestia:
                 test_size=0.2,
                 sim_df=sim_df,
                 threshold_step=0.1,
-                valid_size=0.
+                valid_size=0.,
+                min_threshold=0.1
             )
             hg.save_precalculated(osp.join(self.outdir, 'th-parts', f'{sim}-{alg}.pckl'))
             for th, parts in hg.get_partitions(filter=0.185):
@@ -491,7 +512,7 @@ class AutoHestia:
                 self.logger.debug(f'{alg} - {sim} - {th}')
                 mdl.fit(self.x[parts['train']], self.y[parts['train']])
                 if self.task_type == 'classification':
-                    preds = mdl.predict_proba(self.x[parts['test']])
+                    preds = mdl.predict_proba(self.x[parts['test']])[:, 1]
                 else:
                     preds = mdl.predict(self.x[parts['test']])
                 result = evaluate(
@@ -501,10 +522,8 @@ class AutoHestia:
                 result['metric'] = sim
                 result['part-alg'] = alg
                 result['th'] = th
-
                 results.append(result)
         return pd.DataFrame(results)
-
 
     def _eval_sim_parts(self) -> List[dict]:
         model = self._get_model()
@@ -516,7 +535,7 @@ class AutoHestia:
             pbar.set_description(f"  Sim Mtx - {metric_name}")
             sim_df = metric_func(
                 df_query=self.df,
-                field_name=self.field_name,
+                field_name=self.field_name if 'seq' not in metric_name else self.seq_field_name,
                 threshold=0.1
             )
             sim_df.write_ipc(osp.join(self.cache, f'{metric_name}.feather'),
@@ -548,7 +567,7 @@ class AutoHestia:
                 pickle.dump(cparts, open(cparts_file, 'wb'))
                 mdl.fit(self.x[cparts['train']], self.y[cparts['train']])
                 if self.task_type == 'classification':
-                    preds = mdl.predict_proba(self.x[cparts['test']])
+                    preds = mdl.predict_proba(self.x[cparts['test']])[:, 1]
                 else:
                     preds = mdl.predict(self.x[cparts['test']])
                 result = evaluate(
@@ -587,7 +606,7 @@ class AutoHestia:
                 pickle.dump(bparts, open(bparts_file, 'wb'))
                 mdl.fit(self.x[bparts['train']], self.y[bparts['train']])
                 if self.task_type == 'classification':
-                    preds = mdl.predict_proba(self.x[bparts['test']])
+                    preds = mdl.predict_proba(self.x[bparts['test']])[:, 1]
                 else:
                     preds = mdl.predict(self.x[bparts['test']])
                 result = evaluate(
