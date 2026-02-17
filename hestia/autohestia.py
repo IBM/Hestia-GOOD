@@ -197,8 +197,6 @@ class AutoHestia:
         device: str = 'cpu',
         task_type: str = 'classification',
         algorithms: List[str] = ['ccpart', 'butina'],
-        # add_custom_metrics: Dict[str, Callable] = {},
-        # add_custom_algorithm: Dict[str, Callable] = {},
         representation: Union[str, Callable] = 'ecfp-4',
         eval_model: str = 'svm',
         outdir: str = 'autohestia_experiment',
@@ -282,7 +280,7 @@ class AutoHestia:
             pipe = get_pipeline('to-smiles')
             self.df['hestia-smiles'] = pipe(
                 self.df[self.field_name].tolist(),
-                n_jobs=n_jobs 
+                n_jobs=n_jobs
             )
             self.seq_field_name = self.field_name
             self.field_name = 'hestia-smiles'
@@ -331,6 +329,7 @@ class AutoHestia:
         monotonicity_df = self._monotonicity_summary(results2_df)
         monotonicity_df = monotonicity_df.sort_values('monotonicity', ascending=False).reset_index(drop=True)
         print(monotonicity_df)
+
         for (sim, alg), row in monotonicity_df.groupby(['metric', 'part-alg']):
             mask = (results_df['metric'] == sim) & (results_df['part-alg'] == alg)
             results_df.loc[mask, 'rank'] = row.index.item() + 1
@@ -343,134 +342,6 @@ class AutoHestia:
                     osp.join(self.outdir, 'best-partition.pckl'))
         shutil.rmtree(self.cache)
         return pickle.load(open(osp.join(self.outdir, 'best-partition.pckl'), 'rb'))
-
-    # def run_good(self):
-    #     self.logger.info("** Running AutoHestia **")
-    #     self.logger.info("1 - Representing data")
-    #     self.x = self._represent_data()
-    #     self.y = self.df[self.label_name].to_numpy()
-    #     results = []
-    #     sim_dfs: dict[Any, Any] = {}
-    #     model = self._get_model()
-    #     pbar = tqdm(self.metrics.items(), total=len(self.metrics),
-    #                 desc="  Metric")
-    #     algorithms = [alg for alg in self.algorithms if alg != 'umap']
-    #     self.logger.info("2 - Evaluting methods")
-
-    #     for metric_name, metric_func in pbar:
-    #         pbar.set_description(f"  {metric_name}")
-    #         sim_df = metric_func(
-    #             df_query=self.df,
-    #             field_name=self.field_name,
-    #             threshold=0.1
-    #         )
-    #         for alg in algorithms:
-    #             pbar.set_description(f"  {metric_name} - {alg}")
-    #             hdg = HestiaGenerator(self.df, verbose=False)
-    #             hdg.calculate_partitions(
-    #                 sim_df=sim_df,
-    #                 partition_algorithm=alg,
-    #                 test_size=0.2,
-    #                 valid_size=0,
-    #                 verbose=0
-    #             )
-    #             hdg.save_precalculated(osp.join(self.outdir, f'good-{metric_name}-{alg}.pckl'))
-    #             for th, part in (hdg.get_partitions(filter=0.185)):
-    #                 train_x, test_x = self.x[part['train']], self.x[part['test']]
-    #                 train_y, test_y = self.y[part['train']], self.y[part['test']]
-
-    #                 mdl = deepcopy(model)
-
-    #                 mdl.fit(train_x, train_y)
-    #                 if self.task_type == 'classification':
-    #                     preds = mdl.predict_proba(test_x)
-    #                 else:
-    #                     preds = mdl.predict(test_x)
-    #                 result_df = evaluate(
-    #                     preds, test_y,
-    #                     pred_task='reg' if 'reg' in self.task_type else 'class'
-    #                 )
-    #                 result_df['sim-metric'] = metric_name
-    #                 result_df['part-alg'] = alg
-    #                 result_df['th'] = th
-    #                 results.append(result_df)
-
-    #     self.logger.info("3 - Save and interpret results")
-
-    #     results_df = pd.DataFrame(results)
-    #     summary_df = self._summary_good_run(results_df)
-    #     print(summary_df)
-    #     if len(summary_df) == 0:
-    #         return
-    #     else:
-    #         best_metric = summary_df.iloc[0, 0]
-    #     return best_metric
-
-    # def _summary_good_run(self, results_df: pd.DataFrame) -> pd.DataFrame:
-    #     from scipy.stats import spearmanr
-
-    #     epsilon, k, alpha = 0.2, 5, 0.35
-    #     results_df = results_df[results_df.th != 'random'].copy()
-    #     if len(results_df) == 0:
-    #         return pd.DataFrame()
-    #     metric = 'mcc' if self.task_type == 'classification' else 'spcc'
-    #     analyses = []
-
-    #     for (sim, alg), sim_df in results_df.groupby(['sim-metric', 'part-alg']):
-    #         analyses.append({
-    #             'monotonicity': spearmanr(sim_df['th'], sim_df[metric])[0],
-    #             'dynamic_range': 1 - sim_df['th'].min(),
-    #             'min-th-perf': sim_df[sim_df.th == sim_df.th.min()][metric].item(),
-    #             'vertical_range': sim_df[sim_df.th == sim_df.th.max()][metric].item() - sim_df[sim_df.th == sim_df.th.min()][metric].item(),
-    #             'sim-metric': sim,
-    #             'part-alg': alg
-    #         })
-
-    #     def choose(analyses_df: pd.DataFrame, epsilon: float, k: int, alpha: float) -> str:
-    #         max_dynamic_range = analyses_df.dynamic_range.max()
-    #         order = []
-    #         while len(order) < k and epsilon < 1 and alpha > 0.:
-    #             analyses_df_subset = analyses_df[analyses_df.dynamic_range >= max_dynamic_range - epsilon].copy()
-    #             if epsilon == 0.9:
-    #                 alpha -= 0.1
-    #             elif alpha == 0.1:
-    #                 epsilon = 1
-    #                 alpha = 0.
-    #             else:
-    #                 epsilon += 0.1
-    #             means = (
-    #                 analyses_df_subset.groupby(['sim-metric', 'part-alg'])['monotonicity']
-    #                 .mean()
-    #             )
-    #             order = means[means >= alpha].sort_values().index
-    #         return order[::-1]
-
-    #     analyses_df = pd.DataFrame(analyses)
-    #     sim_order = choose(analyses_df, epsilon=epsilon, k=k, alpha=alpha)
-    #     analyses_df_subset = analyses_df[
-    #         analyses_df['sim-metric'].isin(sim_order[:k])
-    #     ].copy()
-    #     summary = []
-    #     for (sim, alg), sim_df in analyses_df_subset.groupby(['sim-metric', 'part-alg']):
-    #         summary.append({
-    #             'sim-metric': sim,
-    #             'part-alg': alg,
-    #             'monotonicity-mean': sim_df.monotonicity.mean(),
-    #             'monotonicity-sem': sim_df.monotonicity.sem(),
-    #             'dynamic-range-mean': sim_df.dynamic_range.mean(),
-    #             'dynamic-range-sem': sim_df.dynamic_range.sem(),
-    #             'vertical-range-mean': sim_df.vertical_range.mean(),
-    #             'vertical-range-sem': sim_df.vertical_range.sem(),
-    #             'min-th-perf-mean': sim_df['min-th-perf'].mean(),
-    #             'min-th-perf-sem': sim_df['min-th-perf'].sem(),
-    #         })
-
-    #     summary_df = pd.DataFrame(summary)
-    #     if len(summary_df) == 0:
-    #         return summary_df
-    #     summary_df.sort_values('vertical-range-mean', inplace=True,
-    #                            ascending=False)
-    #     return summary_df
 
     def _monotonicity_summary(self, results_df: pd.DataFrame):
         print(results_df)
@@ -675,7 +546,7 @@ class AutoHestia:
         return results
 
     def _get_metrics(self, data_type: str) -> Dict[str, Callable]:
-        metrics = AVAILABLE_METRICS[data_type]
+        metrics = deepcopy(AVAILABLE_METRICS[data_type])
         for metric_name, conf in metrics.items():
             if conf['type'] == 'fp':
                 metrics[metric_name] = _define_mol_sim(
@@ -709,7 +580,7 @@ class AutoHestia:
             )
         elif self.rep in PLMs + CLMs:
             rep_engine = RepEngineLM(
-                model_name=self.representation,
+                model=self.rep,
             )
             rep_engine.move_to_device(self.device)
             x = rep_engine.compute_reps(
