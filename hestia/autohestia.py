@@ -6,7 +6,7 @@ import sys
 from copy import deepcopy
 from datetime import datetime
 from itertools import product
-from typing import Callable, Dict, List, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import logging
 import numpy as np
@@ -306,10 +306,18 @@ class AutoHestia:
         df.to_csv(osp.join(outdir, "metadata", "dataset.csv"),
                   index=True)
 
-    def run(self, k: int = 3):
+    def run(self, k: int = 3, add_x: Optional[np.ndarray] = None):
         self.logger.info("** Running AutoHestia **")
         self.logger.info("1 - Representing data")
         self.x = self._represent_data()
+        if add_x is not None:
+            if self.x.shape[0] != add_x.shape[0]:
+                self.logger.error("Shape representations: ", self.x.shape)
+                self.logger.error("Shape `add_x`: ", add_x.shape)
+                raise ValueError("add_x must have the same number of rows as the dataset")
+
+            self.x = np.concatenate([self.x, add_x], axis=1)
+
         self.y = self.df[self.label_name].to_numpy()
 
         self.logger.info("2 - Prepare and evaluate partitions")
@@ -328,20 +336,21 @@ class AutoHestia:
         results2_df = self._check_similarity_correlation(results_df)
         monotonicity_df = self._monotonicity_summary(results2_df)
         monotonicity_df = monotonicity_df.sort_values('monotonicity', ascending=False).reset_index(drop=True)
-        print(monotonicity_df)
 
         for (sim, alg), row in monotonicity_df.groupby(['metric', 'part-alg']):
             mask = (results_df['metric'] == sim) & (results_df['part-alg'] == alg)
             results_df.loc[mask, 'rank'] = row.index.item() + 1
             results_df.loc[mask, 'monotonicity'] = row.monotonicity.item()
         results_df.loc[results_df['rank'].isna(), 'rank'] = k + 1
+
         results_df = results_df.sort_values('rank', ascending=True).reset_index(drop=True)
         results_df.to_csv(osp.join(self.outdir, "parts-results.tsv"),
                           index=False, sep="\t")
         shutil.copy(osp.join(self.outdir, 'parts', f"{results_df.loc[0, 'part-alg']}-{monotonicity_df.loc[0, 'metric']}.pckl"),
                     osp.join(self.outdir, 'best-partition.pckl'))
         shutil.rmtree(self.cache)
-        return pickle.load(open(osp.join(self.outdir, 'best-partition.pckl'), 'rb'))
+        with open(osp.join(self.outdir, 'best-partition.pckl'), 'rb') as f:
+            return pickle.load(f)
 
     def _monotonicity_summary(self, results_df: pd.DataFrame):
         print(results_df)
