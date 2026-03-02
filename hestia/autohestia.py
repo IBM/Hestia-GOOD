@@ -26,6 +26,7 @@ except ImportError:
         "autopeptideml package is required for AutoHestia. "
         "Please install it via pip: ``pip install autopeptideml``"
     )
+from hestia import __version__
 from hestia.dataset_generator import HestiaGenerator
 from hestia.partition import ccpart, butina, umap_original
 from hestia.similarity import (
@@ -36,8 +37,6 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.svm import SVC, SVR
 from tqdm import tqdm
-
-__version__ = '1.1.0'
 
 
 AVAILABLE_ALGORITHMS = {
