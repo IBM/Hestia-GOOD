@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import polars as pl
 
@@ -17,10 +18,10 @@ def similarity_reduction(
         mssg += ' implemented for connected components.'
         raise NotImplementedError(mssg)
 
-    clusters_df = generate_clusters(df=df, field_name=field_name,
+    clusters = generate_clusters(df=df, field_name=field_name,
                                     sim_df=sim_df, verbose=verbose,
                                     threshold=threshold,
                                     cluster_algorithm=clustering_mode)
-    representatives = clusters_df.cluster.unique()
+    representatives = np.unique(clusters)
     df = df[df.index.isin(representatives)]
     return df
