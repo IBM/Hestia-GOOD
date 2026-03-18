@@ -348,8 +348,12 @@ class AutoHestia:
         shutil.copy(osp.join(self.outdir, 'parts', f"{results_df.loc[0, 'part-alg']}-{monotonicity_df.loc[0, 'metric']}.pckl"),
                     osp.join(self.outdir, 'best-partition.pckl'))
         shutil.rmtree(self.cache)
+        self.results_df = results_df
+
         with open(osp.join(self.outdir, 'best-partition.pckl'), 'rb') as f:
-            return pickle.load(f)
+            self.best_part = pickle.load(f)
+
+        return self.best_part
 
     def _monotonicity_summary(self, results_df: pd.DataFrame):
         print(results_df)
