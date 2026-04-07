@@ -1,6 +1,52 @@
 import numpy as np
-from sklearn.metrics.pairwise import (cosine_similarity, manhattan_distances,
-                                      euclidean_distances)
+
+
+def bulk_tanimoto_continuous(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
+    norm_u = np.dot(u, u)
+    norm_bulk = np.einsum('ij,ij->i', bulk, bulk)
+    dot = bulk @ u
+    result = dot / (norm_u + norm_bulk - dot)
+    return result
+
+
+def bulk_jensen_shannon(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
+    u_norm = u / np.sum(u)
+    bulk_norm = bulk / np.sum(bulk, axis=1, keepdims=True)
+    m = 0.5 * (bulk_norm + u_norm)
+    mask_u = u_norm > 0
+    mask_bulk = bulk_norm > 0
+
+    js = (0.5 * np.sum(u_norm * np.log(u_norm / m), axis=1) * mask_u[:, None] +
+          0.5 * np.sum(bulk_norm * np.log(bulk_norm / m), axis=1) * mask_bulk)
+    return np.sqrt(js)
+
+
+def bulk_mahalanobis_core(u: np.ndarray, bulk: np.ndarray, inv_cov: np.ndarray) -> np.ndarray:
+    diffs = bulk - u
+    left = diffs @ inv_cov
+    sq_distances = np.sum(left * diffs, axis=1)
+    sq_distances = np.maximum(sq_distances, 0.0)
+    distances = np.sqrt(sq_distances)
+    return distances
+
+
+class bulk_mahalanobis:
+    def __init__(self):
+        self.prev_bulk_id = None
+        self.inv_cov = None
+        self.mean = None
+
+    def __call__(self, u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
+        if self.prev_bulk_id != id(bulk):
+            mean = bulk.mean(axis=0)
+            X_centered = bulk - mean
+            cov = (X_centered.T @ X_centered) / (bulk.shape[0] - 1)
+            inv_cov = np.linalg.inv(cov)
+            self.mean = mean
+            self.inv_cov = inv_cov
+            self.prev_bulk_id = id(bulk)
+
+        return bulk_mahalanobis_core(u, bulk, self.inv_cov)
 
 
 def bulk_np_jaccard(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:

@@ -16,7 +16,8 @@ requirements = [
     'numpy',
     'tqdm',
     'pyarrow',
-    'pyyaml'
+    'pyyaml',
+    'numba'
 ]
 
 test_requirements = requirements
