@@ -621,6 +621,8 @@ def umap_original(
     radius: int = 2,
     bits: int = 1024,
     n_bins: int = 10,
+    lm: str = None,
+    device: str = 'cpu',
     **kwargs
 ):
     """Computes UMAP embeddings using the specified feature column, generates cluster
@@ -709,7 +711,9 @@ def umap_original(
         n_pcs=n_pcs,
         min_dist=min_dist,
         radius=radius,
-        bits=bits
+        bits=bits,
+        lm=lm,
+        device=device
     )
     train, test, valid = smallest_assignment(
         clusters, labels, size,
