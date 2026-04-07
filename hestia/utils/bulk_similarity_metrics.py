@@ -15,9 +15,9 @@ def bulk_jensen_shannon(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
     m = 0.5 * (bulk_norm + u_norm)
     mask_u = u_norm > 0
     mask_bulk = bulk_norm > 0
-
-    js = (0.5 * np.sum(u_norm * np.log(u_norm / m), axis=1) * mask_u[:, None] +
-          0.5 * np.sum(bulk_norm * np.log(bulk_norm / m), axis=1) * mask_bulk)
+    term1 = np.sum(mask_u * u_norm * np.log(u_norm / m), axis=1)
+    term2 = np.sum(mask_bulk * bulk_norm * np.log(bulk_norm / m), axis=1)
+    js = 0.5 * (term1 + term2)
     return np.sqrt(js)
 
 
@@ -45,7 +45,6 @@ class bulk_mahalanobis:
             self.mean = mean
             self.inv_cov = inv_cov
             self.prev_bulk_id = id(bulk)
-
         return bulk_mahalanobis_core(u, bulk, self.inv_cov)
 
 
