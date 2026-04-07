@@ -256,3 +256,26 @@ canonical-peptide:
     sim_index: euclidean
     rep:
       model: esm2-8m
+
+tabular:
+  cosine:
+    type: direct
+    sim_index: cosine-np
+  euclidean:
+    type: direct
+    sim_index: euclidean
+  manhattan:
+    type: direct
+    sim_index: manhattan
+  canberra:
+    type: direct
+    sim_index: canberra
+  mahalanobis:
+    type: direct
+    sim_index: mahalanobis
+  jensen-shannon:
+    type: direct
+    sim_index: jensen-shannon
+  tanimoto-continuous:
+    type: direct
+    sim_index: tanimoto-continuous

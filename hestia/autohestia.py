@@ -48,7 +48,8 @@ UMAP_FPS = {
     'molecule': ['ecfp-2', 'ecfp-3', 'ecfp-4', 'ecfp-6'],
     'peptide': ['ecfp-3', 'ecfp-4', 'ecfp-6', 'ecfp-8'],
     'canonical-peptide': ['ecfp-3', 'ecfp-4', 'ecfp-6', 'ecfp-8'],
-    'sequence': []
+    'sequence': ['esm2-8m'],
+    'tabular': []
 }
 AVAILABLE_METRICS = yaml.safe_load(
     open(osp.join(
@@ -159,6 +160,26 @@ def _define_emb_sim(
             verbose=0
         )
     return emb_sim
+
+
+def _define_tab_sim(
+    sim_index: str,
+    threads: int = -1
+) -> Callable:
+    def sim(
+        df_query: pd.DataFrame,
+        field_name: str,
+        threshold: float = 0.1
+    ) -> pl.DataFrame:
+        x = np.stack(df_query[field_name].to_list())
+        return embedding_similarity(
+            query_embds=x,
+            sim_function=sim_index,
+            threshold=threshold,
+            threads=threads,
+            verbose=0
+        )
+    return sim
 
 
 def define_logger() -> logging.Logger:
@@ -312,7 +333,7 @@ class AutoHestia:
         if self.rep is not None:
             self.x = self._represent_data()
         else:
-            self.x = self.df[self.field_name]
+            self.x = np.stack(self.df[self.field_name].to_list())
 
         if add_x is not None:
             if self.x.shape[0] != add_x.shape[0]:
@@ -323,6 +344,9 @@ class AutoHestia:
             self.x = np.concatenate([self.x, add_x], axis=1)
 
         self.y = self.df[self.label_name].to_numpy()
+        if self.task_type == 'classification':
+            small_dict = {n: i for i, n in enumerate(np.unique(self.y))}
+            self.y = np.array([small_dict[n] for n in self.y])
 
         self.logger.info("2 - Prepare and evaluate partitions")
         results = []
@@ -437,6 +461,7 @@ class AutoHestia:
                         sim_df=sim_df,
                         field_name=self.field_name,
                         label_name=self.label_name,
+                        valid_size=0.0,
                         test_size=0.2,
                         threshold=th/100,
                     )
@@ -453,19 +478,28 @@ class AutoHestia:
                 cparts_file = osp.join(self.outdir, 'parts',
                                        f'ccpart-{metric_name}.pckl')
                 pickle.dump(cparts, open(cparts_file, 'wb'))
-                mdl.fit(self.x[cparts['train']], self.y[cparts['train']])
-                if self.task_type == 'classification':
-                    preds = mdl.predict_proba(self.x[cparts['test']])[:, 1]
+                if len(cparts['test']) < 0.1 * len(self.df):
+                    results.append({
+                        'metric': metric_name,
+                        'part-alg': 'ccpart',
+                        'part-alg-config': ccpart_config,
+                        'failed': True
+                    })
                 else:
-                    preds = mdl.predict(self.x[cparts['test']])
-                result = evaluate(
-                    preds, self.y[cparts['test']],
-                    pred_task='reg' if 'reg' in self.task_type else 'class'
-                )
-                result['metric'] = metric_name
-                result['part-alg'] = 'ccpart'
-                result['part-alg-config'] = ccpart_config
-                results.append(result)
+                    mdl.fit(self.x[cparts['train']], self.y[cparts['train']])
+                    if self.task_type == 'classification':
+                        preds = mdl.predict_proba(self.x[cparts['test']])[:, 1]
+                    else:
+                        preds = mdl.predict(self.x[cparts['test']])
+                    result = evaluate(
+                        preds, self.y[cparts['test']],
+                        pred_task='reg' if 'reg' in self.task_type else 'class'
+                    )
+                    result['metric'] = metric_name
+                    result['part-alg'] = 'ccpart'
+                    result['part-alg-config'] = ccpart_config
+                    result['failed'] = False
+                    results.append(result)
 
             # Butina eval
             if 'butina' in self.algorithms:
@@ -492,19 +526,28 @@ class AutoHestia:
                 bparts_file = osp.join(self.outdir, 'parts',
                                        f'butina-{metric_name}.pckl')
                 pickle.dump(bparts, open(bparts_file, 'wb'))
-                mdl.fit(self.x[bparts['train']], self.y[bparts['train']])
-                if self.task_type == 'classification':
-                    preds = mdl.predict_proba(self.x[bparts['test']])[:, 1]
+                if len(bparts['test']) < 0.1 * len(self.df):
+                    results.append({
+                        'metric': metric_name,
+                        'part-alg': 'butina',
+                        'part-alg-config': butina_config,
+                        'failed': True
+                    })
                 else:
-                    preds = mdl.predict(self.x[bparts['test']])
-                result = evaluate(
-                    preds, self.y[bparts['test']],
-                    pred_task='reg' if 'reg' in self.task_type else 'class'
-                )
-                result['metric'] = metric_name
-                result['part-alg'] = 'butina'
-                result['part-alg-config'] = butina_config
-                results.append(result)
+                    mdl.fit(self.x[bparts['train']], self.y[bparts['train']])
+                    if self.task_type == 'classification':
+                        preds = mdl.predict_proba(self.x[bparts['test']])[:, 1]
+                    else:
+                        preds = mdl.predict(self.x[bparts['test']])
+                    result = evaluate(
+                        preds, self.y[bparts['test']],
+                        pred_task='reg' if 'reg' in self.task_type else 'class'
+                    )
+                    result['metric'] = metric_name
+                    result['part-alg'] = 'butina'
+                    result['part-alg-config'] = butina_config
+                    result['failed'] = False
+                    results.append(result)
         return results
 
     def _eval_fp_parts(self) -> List[dict]:
@@ -584,6 +627,10 @@ class AutoHestia:
                         f"Sequence similarity method "
                         f"``{conf['method']}`` not implemented."
                     )
+            elif conf['type'] == 'direct':
+                metrics[metric_name] = _define_tab_sim(
+                    sim_index=conf['sim_index'], threads=self.njobs
+                )
             else:
                 raise NotImplementedError(
                     f"Metric type: ``{conf['type']}`` not implemented."
@@ -684,5 +731,3 @@ if __name__ == '__main__':
         verbose_level='debug'
     )
     out = hestia.run()
-
-    print(out)
