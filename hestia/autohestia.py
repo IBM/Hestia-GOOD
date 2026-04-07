@@ -193,6 +193,7 @@ class AutoHestia:
         field_name: str,
         label_name: str,
         data_type: str = 'molecule',
+        convert_to_smiles: bool = False,
         device: str = 'cpu',
         task_type: str = 'classification',
         algorithms: List[str] = ['ccpart', 'butina'],
@@ -273,7 +274,7 @@ class AutoHestia:
         self.logger.info(f"Number of threads: {self.njobs}")
         self.logger.info("")
 
-        if 'seq' in self.field_name:
+        if convert_to_smiles:
             self.logger.info("** Sequence data detected **")
             self.logger.info("** Converting to SMILES **")
             pipe = get_pipeline('to-smiles')
@@ -308,7 +309,11 @@ class AutoHestia:
     def run(self, k: int = 3, add_x: Optional[np.ndarray] = None):
         self.logger.info("** Running AutoHestia **")
         self.logger.info("1 - Representing data")
-        self.x = self._represent_data()
+        if self.rep is not None:
+            self.x = self._represent_data()
+        else:
+            self.x = self.df[self.field_name]
+
         if add_x is not None:
             if self.x.shape[0] != add_x.shape[0]:
                 self.logger.error("Shape representations: ", self.x.shape)
