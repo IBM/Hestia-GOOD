@@ -306,6 +306,8 @@ def _umap_clustering(
     df: pd.DataFrame,
     field_name: str,
     verbose: int,
+    lm: str = None,
+    device: str = 'cpu',
     boolean_out: bool = True,
     threshold: float = None,
     sim_df: pd.DataFrame = None,
@@ -326,8 +328,7 @@ def _umap_clustering(
         raise ImportError(
             "This function requires umap. `pip install umap-learn`"
         )
-
-    if sim_df is None:
+    if sim_df is None and lm is None:
         try:
             from rdkit import Chem
             from rdkit.Chem import rdFingerprintGenerator
@@ -343,6 +344,11 @@ def _umap_clustering(
                    if x is not None else np.zeros((bits, ))
                    for x in mol_list]
         mtx = np.stack(fp_list)
+    elif sim_df is None and lm is not None:
+        from autopeptideml.reps.lms import RepEngineLM
+        re = RepEngineLM(lm)
+        re.move_to_device(device)
+        mtx = np.stack(re.compute_reps(df[field_name]))
     else:
         mtx = sim_df2mtx(
             sim_df, threshold=threshold,
