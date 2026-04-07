@@ -9,7 +9,8 @@ from .bulk_similarity_metrics import (
     bulk_cosine_similarity, bulk_binary_manhattan_similarity,
     bulk_euclidean, bulk_manhattan,
     bulk_np_tanimoto, bulk_np_dice, bulk_np_rogot_goldberg, bulk_np_sokal,
-    bulk_np_jaccard, bulk_canberra)
+    bulk_np_jaccard, bulk_canberra,
+    bulk_mahalanobis, bulk_jensen_shannon, bulk_tanimoto_continuous)
 from .fingerprints import get_fp_function
 
 BULK_SIM_METRICS = {
@@ -22,5 +23,8 @@ BULK_SIM_METRICS = {
     'jaccard': bulk_np_jaccard,
     'manhattan': bulk_manhattan,
     'euclidean': bulk_euclidean,
-    'canberra': bulk_canberra
+    'canberra': bulk_canberra,
+    'mahalanobis': bulk_mahalanobis,
+    'jensen-shannon': bulk_jensen_shannon,
+    'tanimoto-continuous': bulk_tanimoto_continuous
 }

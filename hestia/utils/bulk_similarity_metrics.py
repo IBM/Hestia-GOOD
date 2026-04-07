@@ -1,13 +1,114 @@
 import numpy as np
-from sklearn.metrics.pairwise import (cosine_similarity, manhattan_distances,
-                                      euclidean_distances)
+
+from numba import njit
 
 
+@njit
+def bulk_tanimoto_continuous(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
+    n, d = bulk.shape[0], bulk.shape[1]
+    result = np.empty(n)
+
+    norm_u = 0.0
+    for j in range(d):
+        norm_u += u[j] * u[j]
+
+    for i in range(n):
+        dot = 0.0
+        norm_b = 0.0
+
+        for j in range(d):
+            dot += bulk[i, j] * u[j]
+            norm_b += bulk[i, j] * bulk[i, j]
+
+        denom = norm_u + norm_b - dot
+        result[i] = dot / denom
+
+    return result
+
+
+# @njit
+def bulk_jensen_shannon(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
+    n, d = bulk.shape
+    distances = np.empty(n)
+
+    # normalize u
+    u_sum = np.sum(u)
+    u_norm = u / u_sum
+
+    for i in range(n):
+        row = bulk[i]
+        row_sum = np.sum(row)
+        row_norm = row / row_sum
+
+        js = 0.0
+        for j in range(d):
+            m = 0.5 * (u_norm[j] + row_norm[j])
+
+            if u_norm[j] > 0:
+                js += 0.5 * u_norm[j] * np.log(u_norm[j] / m)
+            if row_norm[j] > 0:
+                js += 0.5 * row_norm[j] * np.log(row_norm[j] / m)
+
+        distances[i] = np.sqrt(js)
+
+    return distances
+
+
+@njit
+def bulk_mahalanobis(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
+    n, d = bulk.shape
+
+    # --- compute mean ---
+    mean = np.zeros(d)
+    for i in range(n):
+        for j in range(d):
+            mean[j] += bulk[i, j]
+    for j in range(d):
+        mean[j] /= n
+
+    # --- compute covariance matrix ---
+    cov = np.zeros((d, d))
+    for i in range(n):
+        for j in range(d):
+            for k in range(d):
+                cov[j, k] += (bulk[i, j] - mean[j]) * (bulk[i, k] - mean[k])
+    for j in range(d):
+        for k in range(d):
+            cov[j, k] /= (n - 1)
+
+    # --- invert covariance (do this once) ---
+    inv_cov = np.linalg.inv(cov)
+
+    # --- compute distances ---
+    distances = np.empty(n)
+    for i in range(n):
+        # temp = inv_cov @ diff
+        temp = np.zeros(d)
+        for j in range(d):
+            for k in range(d):
+                temp[j] += inv_cov[j, k] * (bulk[i, k] - u[k])
+
+        s = 0.0
+        for j in range(d):
+            diff = bulk[i, j] - u[j]
+            s += temp[j] * diff
+
+        distances[i] = np.sqrt(s)
+
+    return distances
+
+
+@njit
 def bulk_np_jaccard(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
-    bits = bulk.shape[1]
-    comp = (bulk == u)
-    counts = comp.sum(1)
-    return counts / bits
+    n, m = bulk.shape
+    out = np.empty(n)
+    for i in range(n):
+        count = 0
+        for j in range(m):
+            if bulk[i, j] == u[j]:
+                count += 1
+        out[i] = count / m
+    return out
 
 
 def bulk_np_tanimoto(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
