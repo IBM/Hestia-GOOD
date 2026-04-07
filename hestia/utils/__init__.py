@@ -24,7 +24,7 @@ BULK_SIM_METRICS = {
     'manhattan': bulk_manhattan,
     'euclidean': bulk_euclidean,
     'canberra': bulk_canberra,
-    'mahalanobis': bulk_mahalanobis,
+    'mahalanobis': bulk_mahalanobis(),
     'jensen-shannon': bulk_jensen_shannon,
     'tanimoto-continuous': bulk_tanimoto_continuous
 }

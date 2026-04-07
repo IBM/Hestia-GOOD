@@ -1,114 +1,59 @@
 import numpy as np
 
-from numba import njit
 
-
-@njit
 def bulk_tanimoto_continuous(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
-    n, d = bulk.shape[0], bulk.shape[1]
-    result = np.empty(n)
-
-    norm_u = 0.0
-    for j in range(d):
-        norm_u += u[j] * u[j]
-
-    for i in range(n):
-        dot = 0.0
-        norm_b = 0.0
-
-        for j in range(d):
-            dot += bulk[i, j] * u[j]
-            norm_b += bulk[i, j] * bulk[i, j]
-
-        denom = norm_u + norm_b - dot
-        result[i] = dot / denom
-
+    norm_u = np.dot(u, u)
+    norm_bulk = np.einsum('ij,ij->i', bulk, bulk)
+    dot = bulk @ u
+    result = dot / (norm_u + norm_bulk - dot)
     return result
 
 
-# @njit
 def bulk_jensen_shannon(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
-    n, d = bulk.shape
-    distances = np.empty(n)
+    u_norm = u / np.sum(u)
+    bulk_norm = bulk / np.sum(bulk, axis=1, keepdims=True)
+    m = 0.5 * (bulk_norm + u_norm)
+    mask_u = u_norm > 0
+    mask_bulk = bulk_norm > 0
 
-    # normalize u
-    u_sum = np.sum(u)
-    u_norm = u / u_sum
+    js = (0.5 * np.sum(u_norm * np.log(u_norm / m), axis=1) * mask_u[:, None] +
+          0.5 * np.sum(bulk_norm * np.log(bulk_norm / m), axis=1) * mask_bulk)
+    return np.sqrt(js)
 
-    for i in range(n):
-        row = bulk[i]
-        row_sum = np.sum(row)
-        row_norm = row / row_sum
 
-        js = 0.0
-        for j in range(d):
-            m = 0.5 * (u_norm[j] + row_norm[j])
-
-            if u_norm[j] > 0:
-                js += 0.5 * u_norm[j] * np.log(u_norm[j] / m)
-            if row_norm[j] > 0:
-                js += 0.5 * row_norm[j] * np.log(row_norm[j] / m)
-
-        distances[i] = np.sqrt(js)
-
+def bulk_mahalanobis_core(u: np.ndarray, bulk: np.ndarray, inv_cov: np.ndarray) -> np.ndarray:
+    diffs = bulk - u
+    left = diffs @ inv_cov
+    sq_distances = np.sum(left * diffs, axis=1)
+    sq_distances = np.maximum(sq_distances, 0.0)
+    distances = np.sqrt(sq_distances)
     return distances
 
 
-@njit
-def bulk_mahalanobis(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
-    n, d = bulk.shape
+class bulk_mahalanobis:
+    def __init__(self):
+        self.prev_bulk_id = None
+        self.inv_cov = None
+        self.mean = None
 
-    # --- compute mean ---
-    mean = np.zeros(d)
-    for i in range(n):
-        for j in range(d):
-            mean[j] += bulk[i, j]
-    for j in range(d):
-        mean[j] /= n
+    def __call__(self, u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
+        if self.prev_bulk_id != id(bulk):
+            mean = bulk.mean(axis=0)
+            X_centered = bulk - mean
+            cov = (X_centered.T @ X_centered) / (bulk.shape[0] - 1)
+            inv_cov = np.linalg.inv(cov)
+            self.mean = mean
+            self.inv_cov = inv_cov
+            self.prev_bulk_id = id(bulk)
 
-    # --- compute covariance matrix ---
-    cov = np.zeros((d, d))
-    for i in range(n):
-        for j in range(d):
-            for k in range(d):
-                cov[j, k] += (bulk[i, j] - mean[j]) * (bulk[i, k] - mean[k])
-    for j in range(d):
-        for k in range(d):
-            cov[j, k] /= (n - 1)
-
-    # --- invert covariance (do this once) ---
-    inv_cov = np.linalg.inv(cov)
-
-    # --- compute distances ---
-    distances = np.empty(n)
-    for i in range(n):
-        # temp = inv_cov @ diff
-        temp = np.zeros(d)
-        for j in range(d):
-            for k in range(d):
-                temp[j] += inv_cov[j, k] * (bulk[i, k] - u[k])
-
-        s = 0.0
-        for j in range(d):
-            diff = bulk[i, j] - u[j]
-            s += temp[j] * diff
-
-        distances[i] = np.sqrt(s)
-
-    return distances
+        return bulk_mahalanobis_core(u, bulk, self.inv_cov)
 
 
-@njit
 def bulk_np_jaccard(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
-    n, m = bulk.shape
-    out = np.empty(n)
-    for i in range(n):
-        count = 0
-        for j in range(m):
-            if bulk[i, j] == u[j]:
-                count += 1
-        out[i] = count / m
-    return out
+    bits = bulk.shape[1]
+    comp = (bulk == u)
+    counts = comp.sum(1)
+    return counts / bits
 
 
 def bulk_np_tanimoto(u: np.ndarray, bulk: np.ndarray) -> np.ndarray:
