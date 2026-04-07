@@ -157,7 +157,8 @@ def embedding_similarity(
                     raise RuntimeError(job.exception())
                 result = job.result()
                 for idx_target, metric in enumerate(result):
-                    if sim_function in ['manhattan', 'euclidean', 'canberra']:
+                    if sim_function in ['manhattan', 'euclidean', 'canberra',
+                                        'mahalanobis', 'jensen-shannon']:
                         metric = 1 / (1 + metric)
                     if metric >= threshold:
                         results.append((chunk, idx * chunk_size + idx_target, metric))
