@@ -175,47 +175,39 @@ def _greedy_incremental_clustering(
     return np.array(clusters)
 
 
-def _greedy_cover_set(
-    df: pd.DataFrame,
-    sim_df: pd.DataFrame,
-    threshold: float,
-    verbose: int
-) -> np.ndarray:
-    def _find_connectivity(df, sim_df):
-        neighbours = []
-        for i in df.index:
-            in_cluster = set(sim_df.loc[sim_df['query'] == i, 'target'])
-            in_cluster.update(set(sim_df.loc[sim_df['target'] == i, 'query']))
-            neighbours.append(in_cluster)
-        return neighbours
-    sim_df = sim_df[sim_df['metric'] > threshold]
-    neighbours = _find_connectivity(df, sim_df)
-    order = np.argsort(neighbours)[::-1]
+def _greedy_cover_set(df, sim_df, threshold, verbose):
+    sim_df = sim_df[sim_df["metric"] > threshold]
 
-    clusters = np.zeros((len(df)))
-    clustered = set()
-    if verbose > 2:
-        pbar = tqdm(order)
-    else:
-        pbar = order
+    n = len(df)
 
-    for i in pbar:
-        if i in clustered:
+    neighbours = [set() for _ in range(n)]
+
+    for q, t in sim_df[["query", "target"]].itertuples(index=False):
+        neighbours[q].add(t)
+        neighbours[t].add(q)
+
+    order = np.argsort([len(x) for x in neighbours])[::-1]
+    clusters = np.full(n, -1, dtype=int)
+    clustered = np.zeros(n, dtype=bool)
+
+    iterator = tqdm(order) if verbose > 2 else order
+
+    for i in iterator:
+        if clustered[i]:
             continue
-        in_cluster = neighbours[i]
-        in_cluster.update([i])
-        in_cluster = in_cluster.difference(clustered)
-        clustered.update(in_cluster)
 
-        for j in in_cluster:
-            clusters[j] = i
+        in_cluster = neighbours[i] | {i}
+        unclustered = [j for j in in_cluster if not clustered[j]]
 
-    unique_clusters, _ = np.unique(clusters, return_counts=True)
+        clustered[unclustered] = True
+        clusters[unclustered] = i
 
     if verbose > 1:
-        print('Clustering has generated:',
-              f'{len(unique_clusters):,d} clusters for',
-              f'{len(df):,} entities')
+        n_clusters = len(np.unique(clusters))
+        print(
+            f"Clustering has generated: {n_clusters:,d} clusters for {n:,} entities"
+        )
+
     return clusters
 
 
@@ -328,7 +320,7 @@ def _umap_clustering(
         raise ImportError(
             "This function requires umap. `pip install umap-learn`"
         )
-    if sim_df is None and lm is None:
+    if sim_df is None and lm is None and radius is not None:
         try:
             from rdkit import Chem
             from rdkit.Chem import rdFingerprintGenerator
@@ -349,13 +341,18 @@ def _umap_clustering(
         re = RepEngineLM(lm)
         re.move_to_device(device)
         mtx = np.stack(re.compute_reps(df[field_name]))
+    elif sim_df is None:
+        mtx = np.stack(df[field_name].to_numpy())
     else:
         mtx = sim_df2mtx(
             sim_df, threshold=threshold,
             filter_smaller=filter_smaller,
             boolean_out=boolean_out)
-    pca = PCA(n_components=n_pcs)
-    pcs = pca.fit_transform(mtx)
+    if mtx.shape[1] > n_pcs:
+        pca = PCA(n_components=n_pcs)
+        pcs = pca.fit_transform(mtx)
+    else:
+        pcs = mtx
     reducer = UMAP(
         n_components=n_components,
         n_neighbors=n_neighbors,
