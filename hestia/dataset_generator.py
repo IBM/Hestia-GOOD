@@ -74,9 +74,11 @@ class SimArguments:
                     "endextend": 0.5,
                     "matrix": "EBLOSUM62"
                 } if needle_config is None else needle_config
-            if ('dna' in self.data_type.lower() or
-                'RNA' in self.data_type.lower() or
-               'nucl' in self.data_type.lower()):
+            if 'is_nucleotide' in kwargs:
+                self.is_nucleotide = kwargs['is_nucleotide']
+            elif ('dna' in self.data_type.lower() or
+                  'RNA' in self.data_type.lower() or
+                  'nucl' in self.data_type.lower()):
                 self.is_nucleotide = True
             else:
                 self.is_nucleotide = False
