@@ -7,6 +7,7 @@ import polars as pl
 from tqdm import tqdm
 
 from sklearn.model_selection import train_test_split
+from sklearn.cluster import KMeans
 
 from hestia.similarity import sim_df2mtx
 from hestia.clustering import generate_clusters
@@ -856,6 +857,236 @@ def sim_umap(
         return train, test, valid, clusters
     else:
         return train, test, clusters
+
+
+def perimeter_split(
+    df: pd.DataFrame,
+    sim_df: pd.DataFrame,
+    field_name: str = None,
+    label_name: str = None,
+    test_size: float = 0.2,
+    valid_size: float = 0.0,
+    threshold: float = None,
+    verbose: int = 0,
+    n_bins: int = 10,
+):
+    expected_test = test_size * len(df)
+    expected_valid = valid_size * len(df)
+    test, valid = set(), set()
+    sim_df = sim_df.sort("metric", descending=False)
+
+    if threshold is None:
+        # Find indices not present in sim_df
+        paired = set(sim_df["query"]).union(set(sim_df["target"]))
+
+        for i in df.index:
+            if i not in paired:
+                if len(test) < expected_test:
+                    test.add(i)
+                elif len(valid) < expected_valid:
+                    valid.add(i)
+                else:
+                    break
+
+    for row in sim_df.iter_rows(named=True):
+        if len(test) < expected_test:
+            test.add(row['query'])
+            test.add(row['target'])
+        elif len(valid) < expected_valid:
+            valid.add(row['query'])
+            valid.add(row['target'])
+        else:
+            break
+
+    train = [i for i in df.index if i not in test and i not in valid]
+    test, valid = list(test), list(valid)
+
+    # Verbose output
+    if verbose > 2:
+        print(f'Proportion train: {(len(train) / size) * 100:.2f} %')
+        print(f'Proportion test: {(len(test) / size) * 100:.2f} %')
+        print(f'Proportion valid: {(len(valid) / size) * 100:.2f} %')
+
+    # Warnings if the sizes of partitions are smaller than expected
+    if len(test) < expected_test * 0.9 and verbose > 1:
+        print(f'Warning: Proportion of test partition is smaller than expected: {(len(test) / size) * 100:.2f} %')
+    if len(valid) < expected_valid * 0.9 and verbose > 1:
+        print(f'Warning: Proportion of validation partition is smaller than expected: {(len(valid) / size) * 100:.2f} %')
+
+    if valid_size > 0:
+        return np.array(train), np.array(test), np.array(valid)
+    else:
+        return np.array(train), np.array(test)
+
+
+# def maximum_dissimilarity_2(
+#     df: pd.DataFrame,
+#     sim_df: pl.DataFrame,
+#     field_name: str = None,
+#     threshold: float = 0.1,
+#     boolean_out: bool = False,
+#     filter_smaller: bool = False,
+#     test_size: float = 0.2,
+# ):
+#     """
+#     Split data into ID/OOD directly using pairwise similarities.
+
+#     Steps:
+#     1. Select least-connected sample as OOD seed
+#     2. Select least similar sample to OOD as ID seed
+#     3. Iteratively add most similar samples to ID until target size
+#     4. Remaining samples become OOD
+#     """
+#     import numpy as np
+
+#     sim = sim_df2mtx(
+#         sim_df, len(df), len(df),
+#         threshold=threshold, filter_smaller=filter_smaller,
+#         boolean_out=boolean_out
+#     )
+#     N = len(df)
+#     if sim.shape[0] != sim.shape[1]:
+#         raise ValueError("sim_df must be a square similarity matrix")
+
+#     avg_sim = sim.mean(axis=1)
+#     ood_seed = np.argmin(avg_sim)
+
+#     id_seed = np.argmin(sim[ood_seed])
+#     id_indices = {id_seed}
+#     ood_indices = {ood_seed}
+
+#     target_id_size = int(N * test_size)
+
+#     unassigned = set(range(N)) - id_indices - ood_indices
+
+#     # Step 3: iteratively add most similar samples to ID
+#     while len(ood_indices) < target_id_size and unassigned:
+#         unassigned_arr = np.asarray(list(unassigned))
+#         ood_arr = np.asarray(list(ood_indices))
+
+#         best = unassigned_arr[sim[np.ix_(unassigned_arr, ood_arr)].max(axis=1).argmax()]
+#         ood_indices.add(best)
+#         unassigned.remove(best)
+#     # Step 4: remaining → OOD
+#     id_indices.update(unassigned)
+
+#     train_idx = np.array(sorted(id_indices))
+#     test_idx = np.array(sorted(ood_indices))
+
+#     return train_idx, test_idx, None
+
+
+def maximum_dissimilarity(
+    df: pd.DataFrame,
+    field_name: str,
+    sim_df: pl.DataFrame = None,
+    lm: str = None,
+    radius: int = None,
+    bits: int = 1024,
+    device: str = 'cpu',
+    n_clusters: int = 25,
+    test_size: float = 0.2,
+    random_state: int = 1,
+    **kwargs
+):
+    """
+    Split data into ID/OOD using cluster distances.
+
+    Steps:
+    1. Perform K-means clustering
+    2. Select most distant cluster as initial OOD test set
+    3. Choose furthest cluster from OOD as initial ID cluster
+    4. Iteratively add nearest clusters to ID until target allocation
+    5. Assign remaining clusters to OOD
+    """
+    from scipy.spatial.distance import cdist
+    N = len(df)
+    # Step 1: K-means clustering
+    kmeans = KMeans(
+        n_clusters=n_clusters,
+        random_state=random_state
+    )
+
+    if sim_df is None and lm is None and radius is not None:
+        try:
+            from rdkit import Chem, rdBase
+            from rdkit.Chem import rdFingerprintGenerator
+        except ImportError:
+            raise ImportError(
+                "This function requires rdkit. `pip install rdkit`"
+            )
+        blocker = rdBase.BlockLogs()
+        fp_gen = rdFingerprintGenerator.GetMorganGenerator(
+            radius=radius, fpSize=bits
+        )
+        mol_list = [Chem.MolFromSmiles(x) for x in df[field_name]]
+        fp_list = [fp_gen.GetFingerprintAsNumPy(x)
+                   if x is not None else np.zeros((bits, ))
+                   for x in mol_list]
+        mtx = np.stack(fp_list)
+    elif sim_df is None and lm is not None:
+        from autopeptideml.reps.lms import RepEngineLM
+        re = RepEngineLM(lm)
+        re.move_to_device(device)
+        mtx = np.stack(re.compute_reps(df[field_name]))
+    elif sim_df is None:
+        mtx = np.stack(df[field_name].to_numpy())
+
+    labels = kmeans.fit_predict(mtx)
+    centroids = kmeans.cluster_centers_
+
+    # Cluster sample indices
+    cluster_to_indices = {
+        c: np.where(labels == c)[0]
+        for c in range(n_clusters)
+    }
+
+    cluster_sizes = {
+        c: len(cluster_to_indices[c])
+        for c in range(n_clusters)
+    }
+
+    # Pairwise centroid distances
+    centroid_dist = cdist(centroids, centroids)
+
+    # Step 2: Select most isolated cluster as initial OOD
+    avg_dist = centroid_dist.mean(axis=1)
+    ood_seed = np.argmax(avg_dist)
+
+    # Step 3: Furthest cluster from OOD becomes initial ID
+    id_seed = np.argmax(centroid_dist[ood_seed])
+
+    id_clusters = {id_seed}
+    ood_clusters = {ood_seed}
+
+    target_id_size = int(test_size * N)
+    current_id_size = cluster_sizes[id_seed]
+
+    unassigned = set(range(n_clusters)) - id_clusters - ood_clusters
+
+    # Step 4: Iteratively add nearest clusters to ID
+    while current_id_size < target_id_size and unassigned:
+        nearest = min(
+            unassigned,
+            key=lambda c: min(centroid_dist[c, i] for i in id_clusters)
+        )
+
+        id_clusters.add(nearest)
+        current_id_size += cluster_sizes[nearest]
+        unassigned.remove(nearest)
+
+    # Step 5: Remaining clusters -> OOD
+    ood_clusters.update(unassigned)
+
+    train_idx = np.concatenate(
+        [cluster_to_indices[c] for c in id_clusters]
+    )
+
+    test_idx = np.concatenate(
+        [cluster_to_indices[c] for c in ood_clusters]
+    )
+
+    return train_idx, test_idx, labels
 
 
 def scaffold(
