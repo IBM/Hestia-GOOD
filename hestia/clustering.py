@@ -180,13 +180,20 @@ def _greedy_cover_set(df, sim_df, threshold, verbose):
 
     n = len(df)
 
+    # Build neighbour sets from vectorised groupby instead of itertuples loop
+    pairs = sim_df[["query", "target"]].to_numpy()
     neighbours = [set() for _ in range(n)]
 
-    for q, t in sim_df[["query", "target"]].itertuples(index=False):
-        neighbours[q].add(t)
-        neighbours[t].add(q)
+    if len(pairs):
+        # Group all targets per query and all queries per target at once
+        for q, targets in pd.Series(pairs[:, 1]).groupby(pairs[:, 0]):
+            neighbours[int(q)].update(targets.to_numpy())
+        for t, queries in pd.Series(pairs[:, 0]).groupby(pairs[:, 1]):
+            neighbours[int(t)].update(queries.to_numpy())
 
-    order = np.argsort([len(x) for x in neighbours])[::-1]
+    neighbour_sizes = np.array([len(x) for x in neighbours])
+    order = np.argsort(neighbour_sizes)[::-1]
+
     clusters = np.full(n, -1, dtype=int)
     clustered = np.zeros(n, dtype=bool)
 
@@ -196,17 +203,18 @@ def _greedy_cover_set(df, sim_df, threshold, verbose):
         if clustered[i]:
             continue
 
-        in_cluster = neighbours[i] | {i}
-        unclustered = [j for j in in_cluster if not clustered[j]]
+        # np.fromiter avoids intermediate list; filter with boolean mask
+        members = np.fromiter(neighbours[i] | {i}, dtype=int)
+        unclustered_mask = ~clustered[members]
+        unclustered = members[unclustered_mask]
 
         clustered[unclustered] = True
         clusters[unclustered] = i
 
     if verbose > 1:
+        n_clusters = (clusters != clusters[np.roll(np.argsort(clusters), 1)]).sum()
         n_clusters = len(np.unique(clusters))
-        print(
-            f"Clustering has generated: {n_clusters:,d} clusters for {n:,} entities"
-        )
+        print(f"Clustering has generated: {n_clusters:,d} clusters for {n:,} entities")
 
     return clusters
 
