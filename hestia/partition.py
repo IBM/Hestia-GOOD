@@ -919,61 +919,61 @@ def perimeter_split(
         return np.array(train), np.array(test)
 
 
-# def maximum_dissimilarity_2(
-#     df: pd.DataFrame,
-#     sim_df: pl.DataFrame,
-#     field_name: str = None,
-#     threshold: float = 0.1,
-#     boolean_out: bool = False,
-#     filter_smaller: bool = False,
-#     test_size: float = 0.2,
-# ):
-#     """
-#     Split data into ID/OOD directly using pairwise similarities.
+def maximum_dissimilarity_2(
+    df: pd.DataFrame,
+    sim_df: pl.DataFrame,
+    field_name: str = None,
+    threshold: float = 0.1,
+    boolean_out: bool = False,
+    filter_smaller: bool = False,
+    test_size: float = 0.2,
+):
+    """
+    Split data into ID/OOD directly using pairwise similarities.
 
-#     Steps:
-#     1. Select least-connected sample as OOD seed
-#     2. Select least similar sample to OOD as ID seed
-#     3. Iteratively add most similar samples to ID until target size
-#     4. Remaining samples become OOD
-#     """
-#     import numpy as np
+    Steps:
+    1. Select least-connected sample as OOD seed
+    2. Select least similar sample to OOD as ID seed
+    3. Iteratively add most similar samples to ID until target size
+    4. Remaining samples become OOD
+    """
+    import numpy as np
 
-#     sim = sim_df2mtx(
-#         sim_df, len(df), len(df),
-#         threshold=threshold, filter_smaller=filter_smaller,
-#         boolean_out=boolean_out
-#     )
-#     N = len(df)
-#     if sim.shape[0] != sim.shape[1]:
-#         raise ValueError("sim_df must be a square similarity matrix")
+    sim = sim_df2mtx(
+        sim_df, len(df), len(df),
+        threshold=threshold, filter_smaller=filter_smaller,
+        boolean_out=boolean_out
+    )
+    N = len(df)
+    if sim.shape[0] != sim.shape[1]:
+        raise ValueError("sim_df must be a square similarity matrix")
 
-#     avg_sim = sim.mean(axis=1)
-#     ood_seed = np.argmin(avg_sim)
+    avg_sim = sim.mean(axis=1)
+    ood_seed = np.argmin(avg_sim)
 
-#     id_seed = np.argmin(sim[ood_seed])
-#     id_indices = {id_seed}
-#     ood_indices = {ood_seed}
+    id_seed = np.argmin(sim[ood_seed])
+    id_indices = {id_seed}
+    ood_indices = {ood_seed}
 
-#     target_id_size = int(N * test_size)
+    target_id_size = int(N * test_size)
 
-#     unassigned = set(range(N)) - id_indices - ood_indices
+    unassigned = set(range(N)) - id_indices - ood_indices
 
-#     # Step 3: iteratively add most similar samples to ID
-#     while len(ood_indices) < target_id_size and unassigned:
-#         unassigned_arr = np.asarray(list(unassigned))
-#         ood_arr = np.asarray(list(ood_indices))
+    # Step 3: iteratively add most similar samples to ID
+    while len(ood_indices) < target_id_size and unassigned:
+        unassigned_arr = np.asarray(list(unassigned))
+        ood_arr = np.asarray(list(ood_indices))
 
-#         best = unassigned_arr[sim[np.ix_(unassigned_arr, ood_arr)].max(axis=1).argmax()]
-#         ood_indices.add(best)
-#         unassigned.remove(best)
-#     # Step 4: remaining → OOD
-#     id_indices.update(unassigned)
+        best = unassigned_arr[sim[np.ix_(unassigned_arr, ood_arr)].max(axis=1).argmax()]
+        ood_indices.add(best)
+        unassigned.remove(best)
+    # Step 4: remaining → OOD
+    id_indices.update(unassigned)
 
-#     train_idx = np.array(sorted(id_indices))
-#     test_idx = np.array(sorted(ood_indices))
+    train_idx = np.array(sorted(id_indices))
+    test_idx = np.array(sorted(ood_indices))
 
-#     return train_idx, test_idx, None
+    return train_idx, test_idx, None
 
 
 def maximum_dissimilarity(
@@ -984,9 +984,10 @@ def maximum_dissimilarity(
     radius: int = None,
     bits: int = 1024,
     device: str = 'cpu',
-    n_clusters: int = 25,
+    n_clusters: str = 'auto',
     test_size: float = 0.2,
     random_state: int = 1,
+    threshold: float = 0.0,
     **kwargs
 ):
     """
@@ -1002,6 +1003,12 @@ def maximum_dissimilarity(
     from scipy.spatial.distance import cdist
     N = len(df)
     # Step 1: K-means clustering
+    # if n_clusters == 'auto':
+    #     n = min(len(df), 250)
+
+    #     # n = 100
+    #     n_clusters = int(n * (1 - threshold))
+
     kmeans = KMeans(
         n_clusters=n_clusters,
         random_state=random_state
@@ -1045,10 +1052,15 @@ def maximum_dissimilarity(
         c: len(cluster_to_indices[c])
         for c in range(n_clusters)
     }
-
-    # Pairwise centroid distances
+    # threshold  = 1 - threshold
+    # # Pairwise centroid distances
     centroid_dist = cdist(centroids, centroids)
-
+    # if threshold < 1:
+    #     max_dist = centroid_dist.mean()
+    #     centroid_dist = np.minimum(
+    #         centroid_dist,
+    #         threshold * max_dist
+    #     )
     # Step 2: Select most isolated cluster as initial OOD
     avg_dist = centroid_dist.mean(axis=1)
     ood_seed = np.argmax(avg_dist)
@@ -1059,7 +1071,7 @@ def maximum_dissimilarity(
     id_clusters = {id_seed}
     ood_clusters = {ood_seed}
 
-    target_id_size = int(test_size * N)
+    target_id_size = int((1 - test_size) * N)
     current_id_size = cluster_sizes[id_seed]
 
     unassigned = set(range(n_clusters)) - id_clusters - ood_clusters
@@ -1075,7 +1087,6 @@ def maximum_dissimilarity(
         current_id_size += cluster_sizes[nearest]
         unassigned.remove(nearest)
 
-    # Step 5: Remaining clusters -> OOD
     ood_clusters.update(unassigned)
 
     train_idx = np.concatenate(
