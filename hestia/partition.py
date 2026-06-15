@@ -970,8 +970,8 @@ def maximum_dissimilarity_2(
     # Step 4: remaining → OOD
     id_indices.update(unassigned)
 
-    train_idx = np.array(sorted(id_indices))
-    test_idx = np.array(sorted(ood_indices))
+    train_idx = np.array(sorted(ood_indices))
+    test_idx = np.array(sorted(id_indices))
 
     return train_idx, test_idx, None
 
