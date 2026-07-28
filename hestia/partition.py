@@ -982,62 +982,6 @@ def maximum_dissimilarity(
 
     return train_idx, test_idx, None
 
-# def maximum_dissimilarity_2(
-#     df: pd.DataFrame,
-#     sim_df: pl.DataFrame,
-#     field_name: str = None,
-#     threshold: float = 0.1,
-#     boolean_out: bool = False,
-#     filter_smaller: bool = False,
-#     test_size: float = 0.2,
-# ):
-#     """
-#     Split data into ID/OOD directly using pairwise similarities.
-
-#     Steps:
-#     1. Select least-connected sample as OOD seed
-#     2. Select least similar sample to OOD as ID seed
-#     3. Iteratively add most similar samples to ID until target size
-#     4. Remaining samples become OOD
-#     """
-#     import numpy as np
-
-#     sim = sim_df2mtx(
-#         sim_df, len(df), len(df),
-#         threshold=threshold, filter_smaller=filter_smaller,
-#         boolean_out=boolean_out
-#     )
-#     N = len(df)
-#     if sim.shape[0] != sim.shape[1]:
-#         raise ValueError("sim_df must be a square similarity matrix")
-
-#     avg_sim = sim.mean(axis=1)
-#     ood_seed = np.argmin(avg_sim)
-
-#     id_seed = np.argmin(sim[ood_seed])
-#     id_indices = {id_seed}
-#     ood_indices = {ood_seed}
-
-#     target_id_size = int(N * test_size)
-
-#     unassigned = set(range(N)) - id_indices - ood_indices
-
-#     # Step 3: iteratively add most similar samples to ID
-#     while len(ood_indices) < target_id_size and unassigned:
-#         unassigned_arr = np.asarray(list(unassigned))
-#         ood_arr = np.asarray(list(ood_indices))
-
-#         best = unassigned_arr[sim[np.ix_(unassigned_arr, ood_arr)].max(axis=1).argmax()]
-#         ood_indices.add(best)
-#         unassigned.remove(best)
-#     # Step 4: remaining → OOD
-#     id_indices.update(unassigned)
-
-#     train_idx = np.array(sorted(ood_indices))
-#     test_idx = np.array(sorted(id_indices))
-
-#     return train_idx, test_idx, None
-
 
 def maximum_dissimilarity_km(
     df: pd.DataFrame,
@@ -1065,12 +1009,8 @@ def maximum_dissimilarity_km(
     """
     from scipy.spatial.distance import cdist
     N = len(df)
-    # Step 1: K-means clustering
-    # if n_clusters == 'auto':
-    #     n = min(len(df), 250)
-
-    #     # n = 100
-    #     n_clusters = int(n * (1 - threshold))
+    if n_clusters == 'auto':
+        n_clusters = min(len(df), 250)
 
     kmeans = KMeans(
         n_clusters=n_clusters,
