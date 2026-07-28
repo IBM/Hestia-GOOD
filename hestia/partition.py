@@ -917,9 +917,9 @@ def perimeter_split(
         return np.array(train), np.array(test), np.array(valid)
     else:
         return np.array(train), np.array(test)
-    
 
-def maximum_dissimilarity_2(
+
+def maximum_dissimilarity(
     df: pd.DataFrame,
     sim_df: pl.DataFrame,
     field_name: str = None,
@@ -1039,7 +1039,7 @@ def maximum_dissimilarity_2(
 #     return train_idx, test_idx, None
 
 
-def maximum_dissimilarity(
+def maximum_dissimilarity_km(
     df: pd.DataFrame,
     field_name: str,
     sim_df: pl.DataFrame = None,
