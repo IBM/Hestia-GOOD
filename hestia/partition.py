@@ -408,7 +408,8 @@ def graph_part(
     threshold: float = 0.3,
     verbose: int = 2,
     n_parts: int = 10,
-    filter_smaller: Optional[bool] = True
+    filter_smaller: Optional[bool] = True,
+    n_bins: int = 10
 ):
     """
     Builds a graph from the provided similarity matrix, applies a limited
@@ -467,7 +468,9 @@ def graph_part(
         mtx = mtx <= threshold
 
     if label_name is not None:
-        labels = df[label_name]
+        labels = df[label_name].to_numpy()
+        labels = _discretizer(labels, n_bins=n_bins)
+        labels = labels.flatten().astype(int)
     else:
         labels = np.zeros(mtx.shape[0], dtype=np.int8)
     if verbose > 1:
