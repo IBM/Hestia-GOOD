@@ -60,6 +60,47 @@ def test_hdg_graphpart():
     assert len(set(parts[1]['valid']) & set(parts[1]['test'])) == 0
 
 
+def test_hdg_graphpart_with_label_name():
+    """Regression test for bug: HestiaGenerator with GraphPart and label_name.
+
+    When a continuous (float) label column is passed via `label_name` to
+    `calculate_partitions` with `partition_algorithm='graph_part'`, the raw
+    float values from the label column are forwarded directly to
+    `limited_agglomerative_clustering` (in graph_part_utils.py), which tries to
+    use them as integer array indices.  This raises a TypeError / IndexError
+    because floats cannot index into a numpy array.
+
+    The fix — already applied to `ccpart` and `ccpart_random` — is to call
+    `_discretizer` on the labels inside `graph_part` before they are consumed.
+    """
+    df = pd.read_csv(osp.join(osp.dirname(__file__), 'biogen_logS.csv'))
+    hdg = HestiaGenerator(df)
+    mol_args = SimArguments(
+        data_type='small molecule',
+        field_name='SMILES',
+        fingeprint='ecfp',
+        radius=2,
+        bits=2048,
+        verbose=0
+    )
+    # 'logS' is a continuous float column — this should NOT raise TypeError.
+    hdg.calculate_partitions(
+        sim_args=mol_args,
+        label_name='logS',
+        min_threshold=0.1,
+        threshold_step=0.1,
+        test_size=0.2,
+        verbose=0,
+        valid_size=0.1,
+        partition_algorithm='graph_part'
+    )
+
+    parts = hdg.get_partition('min', filter=0.185)
+    assert len(set(parts[1]['train']) & set(parts[1]['test'])) == 0
+    assert len(set(parts[1]['train']) & set(parts[1]['valid'])) == 0
+    assert len(set(parts[1]['valid']) & set(parts[1]['test'])) == 0
+
+
 def test_statstical_test():
     model_results = {
         'ecfp:2-1024': [0.8977702729934635, 0.8943281610083677,0.8757335346731827,

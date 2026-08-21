@@ -343,7 +343,7 @@ class HestiaGenerator:
         :param label_name: The name of the label column for the dataset. Defaults to None.
         :type label_name: Optional[str], optional
         :param label_bins: Number of bins to discretize the label, if the label is continuous (regression).
-            Only with `partition_algorithm`: `ccpart`, `ccpart_random`.
+            Only with `partition_algorithm`: `ccpart`, `ccpart_random`, `graph_part`.
         :type label_bins: Optional[int], optional
         :param min_threshold: The minimum similarity threshold to start partitioning. Defaults to 0.0.
         :type min_threshold: Optional[float], optional
@@ -445,6 +445,7 @@ class HestiaGenerator:
                         threshold=th / 100,
                         sim_df=sim_df, verbose=verbose,
                         n_parts=n_partitions,
+                        n_bins=label_bins,
                     )
                     th_parts = (train, test)
                 except RuntimeError as e:
