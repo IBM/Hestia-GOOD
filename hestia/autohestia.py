@@ -31,6 +31,16 @@ AVAILABLE_ALGORITHMS = {
 
 
 class AutoHestia:
+    """Automatic benchmarking and selection of dataset partitioning strategies.
+
+    Sweeps all combinations of built-in (or custom) partitioning algorithms and
+    pre-computed similarity metrics, evaluates each combination using a
+    k-nearest neighbours probe across similarity thresholds from 0.1 to 1.0,
+    and ranks them by monotonicity and mean performance. A guardrail filter then
+    retains only experiments that meet minimum test-size and dynamic-range
+    requirements, returning the top-ranked partitions ready for model training.
+    """
+
     def __init__(
         self,
         df: pd.DataFrame,
@@ -38,9 +48,22 @@ class AutoHestia:
         x: np.ndarray,
         y: np.ndarray,
         sim_dfs: Dict[str, pl.DataFrame],
-
         verbose_level: str = 'debug'
     ):
+        """Initialise AutoHestia.
+
+        :param df: DataFrame containing the dataset entities.
+        :param field_name: Column name in ``df`` that identifies each entity
+            (e.g. sequence, SMILES, or PDB path).
+        :param x: Pre-computed feature matrix of shape ``(n_samples, n_features)``
+            used to train and evaluate the KNN probe.
+        :param y: Label array of shape ``(n_samples,)``. Arrays with fewer than
+            10 unique values are treated as classification; otherwise regression.
+        :param sim_dfs: Mapping of metric name → pre-computed pairwise similarity
+            Polars DataFrame (as returned by the ``hestia.similarity`` functions).
+        :param verbose_level: Logging verbosity. One of ``'debug'``, ``'info'``,
+            ``'warning'``, or ``'error'``. Defaults to ``'debug'``.
+        """
         self.logger = define_logger('autohestia')
 
         if verbose_level.lower() == 'debug':
@@ -69,6 +92,19 @@ class AutoHestia:
         save_dir: str = 'tmp',
         overwrite: bool = False
     ):
+        """Plot GOOD curves for all evaluated algorithm–metric combinations.
+
+        Saves a ``good.png`` figure under ``<save_dir>/figures/`` and returns
+        the Matplotlib figure object.
+
+        :param save_dir: Root directory where the ``figures/`` sub-folder will
+            be created. Defaults to ``'tmp'``.
+        :param overwrite: If ``True``, an existing ``figures/`` directory is
+            reused without raising an error. Defaults to ``False``.
+        :raises RuntimeError: If called before :meth:`best_guardrailed_splits`.
+        :return: Matplotlib Figure with one line per algorithm–metric combination.
+        :rtype: matplotlib.figure.Figure
+        """
         if self.metric is None:
             raise RuntimeError(
                 "Before computing the plots, first is necessary to run the experiments."
@@ -102,6 +138,61 @@ class AutoHestia:
         overwrite: bool = False,
         save_dir: str = 'tmp'
     ) -> dict:
+        """Run the full guardrailed partitioning sweep and return the best splits.
+
+        For every (partitioning algorithm, similarity metric) pair, partitions
+        are generated at thresholds 0.1–1.0. Each partition is evaluated with a
+        KNN probe (MCC for classification, Spearman CC for regression). Results
+        are then filtered and ranked:
+
+        1. **Dynamic-range filter** – combinations whose threshold range spans
+           less than ``min_dynamic_range`` are discarded.
+        2. **Top-k algorithms** – the ``top_k_parts`` algorithms with the
+           highest worst-case mean performance are retained.
+        3. **Top-l similarities** – for each retained algorithm, the
+           ``top_l_sims`` similarity metrics with the best mean performance
+           are kept.
+
+        Intermediate results are written to ``<save_dir>/`` as CSV files and
+        partition pickle files.
+
+        :param part_algs: List of algorithm names to include. Must be keys of
+            ``AVAILABLE_ALGORITHMS`` (``'ccpart'``, ``'cdhit'``,
+            ``'sim-umap'``, ``'perimeter_split'``, ``'maximum_dissimilarity'``,
+            ``'butina'``). Defaults to all available algorithms.
+        :param custom_algs: Optional mapping of name → callable for
+            user-supplied partitioning functions. The callable must accept the
+            same keyword arguments as the built-in partition functions
+            (``df``, ``sim_df``, ``field_name``, ``threshold``).
+        :param top_k_parts: Number of top-performing partitioning algorithms to
+            retain after the guardrail filter. Defaults to ``3``.
+        :param top_l_sims: Number of similarity metrics to retain per algorithm.
+            Defaults to ``3``.
+        :param min_test_size: Minimum fraction of the dataset that must fall in
+            the test split for a threshold to be included. Defaults to ``0.185``.
+        :param min_dynamic_range: Minimum required span of valid thresholds for
+            an algorithm–metric combination to pass the guardrail. Defaults to
+            ``0.4``.
+        :param overwrite: If ``True``, existing output directories are reused.
+            Defaults to ``False``.
+        :param save_dir: Root output directory. Defaults to ``'tmp'``.
+        :raises ValueError: If ``part_algs`` contains an unrecognised algorithm
+            name, or if no combinations survive the dynamic-range guardrail.
+        :return: Dictionary with the following keys:
+
+            - ``'raw-experiments'`` – :class:`pandas.DataFrame` of per-threshold
+              KNN results for every combination.
+            - ``'main-stats'`` – :class:`pandas.DataFrame` of aggregated
+              statistics (monotonicity, dynamic range, mean performance) after
+              the guardrail filter.
+            - ``'after-guardrail'`` – subset of ``'main-stats'`` containing only
+              the top-k × top-l combinations.
+            - ``'top-combination'`` – ``(part_alg, sim_metric)`` tuple
+              identifying the single best combination.
+            - ``'best-parts'`` – dict mapping similarity threshold → ``{'train':
+              np.ndarray, 'test': np.ndarray}`` for the top combination.
+        :rtype: dict
+        """
         save_dir = Path(save_dir)
         save_parts = save_dir / "parts"
         save_dir.mkdir(exist_ok=overwrite)
