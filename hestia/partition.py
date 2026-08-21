@@ -914,9 +914,9 @@ def perimeter_split(
         print(f'Warning: Proportion of validation partition is smaller than expected: {(len(valid) / size) * 100:.2f} %')
 
     if valid_size > 0:
-        return np.array(train), np.array(test), np.array(valid)
+        return np.array(train), np.array(test), np.array(valid), None
     else:
-        return np.array(train), np.array(test)
+        return np.array(train), np.array(test), None
 
 
 def maximum_dissimilarity(
