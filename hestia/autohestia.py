@@ -164,7 +164,7 @@ class AutoHestia:
 
         result_df = pd.DataFrame(results)
         m_results = []
-        metric = 'mcc' if self.task_type == 'c' else 'scpp'
+        metric = 'mcc' if self.task_type == 'c' else 'spcc'
         self.metric = metric
         for (pa, sf), r_df in result_df.groupby(['part-alg', 'sim-metric']):
             result = {
