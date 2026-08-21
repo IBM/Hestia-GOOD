@@ -26,7 +26,7 @@
 
 <details open markdown="1"><summary><b>Table of Contents</b></summary>
 
-- [Intallation Guide](#installation)
+- [Installation Guide](#installation)
 - [Documentation](#documentation)
 - [Examples](#examples)
 - [License](#license)
@@ -44,7 +44,7 @@ conda activate hestia
 
 ### 1. Python Package
 
-#### 1.1.From PyPI
+#### 1.1. From PyPI
 
 
 ```bash
@@ -213,7 +213,7 @@ clusters_df = generate_clusters(df, field_name='sequence', sim_df=sim_df,
 
 ### 4. Partitioning
 
-Partitioning the entities within a DataFrame `df` into a training and an evaluation subsets can be achieved through 4 different functions: `ccpart`, `graph_part`, `reduction_partition`, and `random_partition`. More details about partitioing algorithms can be found in [Partitionind documentation](https://ibm.github.io/Hestia-GOOD/partitioning). An example of how `cc_part` would be used is:
+Partitioning the entities within a DataFrame `df` into a training and an evaluation subsets can be achieved through 4 different functions: `ccpart`, `graph_part`, `reduction_partition`, and `random_partition`. More details about partitioning algorithms can be found in the [Partitioning documentation](https://ibm.github.io/Hestia-GOOD/partitioning). An example of how `ccpart` would be used is:
 
 ```python
 from hestia.similarity import sequence_similarity_mmseqs
@@ -222,10 +222,57 @@ import pandas as pd
 
 df = pd.read_csv('example.csv')
 sim_df = sequence_similarity_mmseqs(df, field_name='sequence')
-train, test, partition_labs = cc_part(df, threshold=0.3, test_size=0.2, sim_df=sim_df)
+train, test, partition_labs = ccpart(df, threshold=0.3, test_size=0.2, sim_df=sim_df)
 
 train_df = df.iloc[train, :]
 test_df = df.iloc[test, :]
+```
+
+### 5. AutoHestia
+
+`AutoHestia` automatically benchmarks all combinations of partitioning algorithms and similarity metrics on your dataset, then selects the best-performing splits using guardrails (minimum test size and dynamic range). More information in the [AutoHestia docs](https://ibm.github.io/Hestia-GOOD/autohestia/).
+
+```python
+from hestia.autohestia import AutoHestia
+import pandas as pd
+import numpy as np
+
+df = pd.read_csv('example.csv')
+
+# Pre-computed feature matrix and labels
+x = np.load('features.npy')
+y = np.load('labels.npy')
+
+# Pre-computed similarity DataFrames keyed by metric name
+sim_dfs = {
+    'mmseqs2': sim_df_mmseqs,
+    'tanimoto': sim_df_tanimoto,
+}
+
+auto = AutoHestia(
+    df=df,
+    field_name='sequence',
+    x=x,
+    y=y,
+    sim_dfs=sim_dfs,
+    verbose_level='info'
+)
+
+# Run guardrailed experiment sweep
+output = auto.best_guardrailed_splits(
+    top_k_parts=3,
+    top_l_sims=3,
+    min_test_size=0.185,
+    min_dynamic_range=0.4,
+    save_dir='results'
+)
+
+# Retrieve the best partitions
+best_parts = output['best-parts']
+top_combination = output['top-combination']   # (part_alg, sim_metric)
+
+# Plot GOOD curves for all evaluated combinations
+auto.plot_good_curves(save_dir='results')
 ```
 
 License <a name="license"></a>
