@@ -914,12 +914,12 @@ def perimeter_split(
         print(f'Warning: Proportion of validation partition is smaller than expected: {(len(valid) / size) * 100:.2f} %')
 
     if valid_size > 0:
-        return np.array(train), np.array(test), np.array(valid)
+        return np.array(train), np.array(test), np.array(valid), None
     else:
-        return np.array(train), np.array(test)
+        return np.array(train), np.array(test), None
 
 
-def maximum_dissimilarity_2(
+def maximum_dissimilarity(
     df: pd.DataFrame,
     sim_df: pl.DataFrame,
     field_name: str = None,
@@ -928,16 +928,8 @@ def maximum_dissimilarity_2(
     filter_smaller: bool = False,
     test_size: float = 0.2,
 ):
-    """
-    Split data into ID/OOD directly using pairwise similarities.
-
-    Steps:
-    1. Select least-connected sample as OOD seed
-    2. Select least similar sample to OOD as ID seed
-    3. Iteratively add most similar samples to ID until target size
-    4. Remaining samples become OOD
-    """
     import numpy as np
+    import scipy.sparse as sp
 
     sim = sim_df2mtx(
         sim_df, len(df), len(df),
@@ -948,26 +940,41 @@ def maximum_dissimilarity_2(
     if sim.shape[0] != sim.shape[1]:
         raise ValueError("sim_df must be a square similarity matrix")
 
-    avg_sim = sim.mean(axis=1)
-    ood_seed = np.argmin(avg_sim)
+    if sp.issparse(sim):
+        sim = sim.tocsr()
+        avg_sim = np.asarray(sim.mean(axis=1)).ravel()
+    else:
+        sim = np.asarray(sim)
+        avg_sim = sim.mean(axis=1)
 
-    id_seed = np.argmin(sim[ood_seed])
+    ood_seed = int(np.argmin(avg_sim))
+
+    row0 = sim.getrow(ood_seed).toarray().ravel() if sp.issparse(sim) else sim[ood_seed]
+    id_seed = int(np.argmin(row0))
+
     id_indices = {id_seed}
     ood_indices = {ood_seed}
-
     target_id_size = int(N * test_size)
 
-    unassigned = set(range(N)) - id_indices - ood_indices
+    unassigned_mask = np.ones(N, dtype=bool)
+    unassigned_mask[id_seed] = False
+    unassigned_mask[ood_seed] = False
 
-    # Step 3: iteratively add most similar samples to ID
-    while len(ood_indices) < target_id_size and unassigned:
-        unassigned_arr = np.asarray(list(unassigned))
-        ood_arr = np.asarray(list(ood_indices))
+    best_to_ood = np.asarray(row0, dtype=float).copy()
 
-        best = unassigned_arr[sim[np.ix_(unassigned_arr, ood_arr)].max(axis=1).argmax()]
+    while len(ood_indices) < target_id_size and unassigned_mask.any():
+        masked = np.where(unassigned_mask, best_to_ood, -np.inf)
+        best = int(masked.argmax())
+
         ood_indices.add(best)
-        unassigned.remove(best)
-    # Step 4: remaining → OOD
+        unassigned_mask[best] = False
+        if not unassigned_mask.any():
+            break
+
+        new_row = sim.getrow(best).toarray().ravel() if sp.issparse(sim) else sim[best]
+        np.maximum(best_to_ood, new_row, out=best_to_ood)
+
+    unassigned = set(np.nonzero(unassigned_mask)[0].tolist())
     id_indices.update(unassigned)
 
     train_idx = np.array(sorted(ood_indices))
@@ -976,7 +983,7 @@ def maximum_dissimilarity_2(
     return train_idx, test_idx, None
 
 
-def maximum_dissimilarity(
+def maximum_dissimilarity_km(
     df: pd.DataFrame,
     field_name: str,
     sim_df: pl.DataFrame = None,
@@ -1002,12 +1009,8 @@ def maximum_dissimilarity(
     """
     from scipy.spatial.distance import cdist
     N = len(df)
-    # Step 1: K-means clustering
-    # if n_clusters == 'auto':
-    #     n = min(len(df), 250)
-
-    #     # n = 100
-    #     n_clusters = int(n * (1 - threshold))
+    if n_clusters == 'auto':
+        n_clusters = min(len(df), 250)
 
     kmeans = KMeans(
         n_clusters=n_clusters,

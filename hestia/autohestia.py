@@ -1,210 +1,33 @@
-import os
-import os.path as osp
-import shutil
-import sys
+import logging
 
 from copy import deepcopy
-from datetime import datetime
+from pathlib import Path
+from typing import Callable, Dict, List, Optional, Tuple
 from itertools import product
-from typing import Callable, Dict, List, Optional, Union
 
-import logging
 import numpy as np
 import pandas as pd
-import pickle
+import pickle as pk
 import polars as pl
-import yaml
 
-try:
-    from autopeptideml.pipeline import get_pipeline
-    from autopeptideml.reps import PLMs, CLMs, FPs
-    from autopeptideml.reps.fps import RepEngineFP
-    from autopeptideml.reps.lms import RepEngineLM
-    from autopeptideml.train.metrics import evaluate
-except ImportError:
-    raise ImportError(
-        "autopeptideml package is required for AutoHestia. "
-        "Please install it via pip: ``pip install autopeptideml``"
-    )
-from hestia import __version__
-from hestia.dataset_generator import HestiaGenerator
-from hestia.partition import ccpart, butina, umap_original
-from hestia.similarity import (
-    embedding_similarity, sequence_similarity_mmseqs, molecular_similarity
-)
 from scipy.stats import spearmanr
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
-from sklearn.svm import SVC, SVR
+from hestia.partition import (
+    ccpart, cdhit_part, sim_umap, perimeter_split, maximum_dissimilarity,
+    butina
+)
+from hestia.utils.evaluation import evaluate
+from hestia.utils.messages_cli import define_logger, welcome_autohestia
 from tqdm import tqdm
-
 
 AVAILABLE_ALGORITHMS = {
     'ccpart': ccpart,
-    'butina': butina,
-    'umap': umap_original
+    "cdhit": cdhit_part,
+    "sim-umap": sim_umap,
+    "perimeter_split": perimeter_split,
+    "maximum_dissimilarity": maximum_dissimilarity,
+    "butina": butina
 }
-UMAP_FPS = {
-    'molecule': ['ecfp-2', 'ecfp-3', 'ecfp-4', 'ecfp-6'],
-    'peptide': ['ecfp-3', 'ecfp-4', 'ecfp-6', 'ecfp-8'],
-    'canonical-peptide': ['ecfp-3', 'ecfp-4', 'ecfp-6', 'ecfp-8'],
-    'sequence': ['esm2-8m'],
-    'tabular': []
-}
-AVAILABLE_METRICS = yaml.safe_load(
-    open(osp.join(
-        osp.dirname(osp.realpath(__file__)),
-        'utils', 'auto-metrics.yml'
-    ), 'r')
-)
-
-algorithm_list = '\n    - '.join(AVAILABLE_ALGORITHMS.keys())
-metrics_list: str = '\n    - '.join(AVAILABLE_METRICS.keys())
-fingerprints_list = '\n    - '.join([f+'-{radius}-{bits}' for f in FPs])
-MESSAGE_NO_DATA_TYPE = f"""
-Data type: ``[data_type]`` not implemented.
-
-Available data types are:
-    ``
-    - {metrics_list}
-    ``
-
-If none of this suit your use case, please feel free to open
-an issue in the Github repository requesting the
-data type you are interested in:
-https://github.com/IBM/Hestia-GOOD/issues
-"""
-MESSAGE_NO_ALGORITHM = f"""
-Algorithm: ``[algorithm]`` not implemented.
-
-Available algorithms are:
-    ``
-    - {algorithm_list}
-    ``
-If none of them suit your use case, you can add custom algorithms,
-through the ``add_custom_algorithm`` variable. It expects
-a dictionary with the name of the method as key and as values:
-
-    - A function that implements the new partitioning algorithm.
-    The function has to accept at least the ``df`` as an argument
-    and should output two np.ndarrays with the indices for training subset
-    and testing subset.
-    - A list with all desired hyperparameters for the custom method. For
-    example the similarity threshold or the number of clusters.
-"""
-
-
-class TqdmHandler(logging.Handler):
-    def emit(self, record):
-        try:
-            msg = self.format(record)
-            tqdm.write(msg)  # , file=sys.stderr)
-            self.flush()
-        except (KeyboardInterrupt, SystemExit):
-            sys.exit(0)
-            raise KeyboardInterrupt
-        except:
-            self.handleError(record)
-
-
-def _define_mol_sim(
-        rep: str,
-        radius: int,
-        nbits: int,
-        sim_index: str,
-        threads: int = -1
-) -> Callable:
-    def mol_sim(
-        df_query: pd.DataFrame,
-        field_name: str,
-        threshold: float = 0.1
-    ) -> pl.DataFrame:
-        return molecular_similarity(
-            df_query=df_query,
-            field_name=field_name,
-            rep=rep,
-            radius=radius,
-            nbits=nbits,
-            sim_index=sim_index,
-            threshold=threshold,
-            verbose=0,
-            threads=threads
-        )
-    return mol_sim
-
-
-def _define_emb_sim(
-        model: str,
-        device: str,
-        sim_index: str,
-        threads: int = -1
-) -> Callable:
-    def emb_sim(
-        df_query: pd.DataFrame,
-        field_name: str,
-        threshold: float = 0.1
-    ) -> pl.DataFrame:
-        re = RepEngineLM(
-            model=model
-        )
-        re.move_to_device(device)
-        x = re.compute_reps(
-            df_query[field_name].tolist(),
-            verbose=False
-        )
-        return embedding_similarity(
-            query_embds=x,
-            sim_function=sim_index,
-            threshold=threshold,
-            threads=threads,
-            verbose=0
-        )
-    return emb_sim
-
-
-def _define_tab_sim(
-    sim_index: str,
-    threads: int = -1
-) -> Callable:
-    def sim(
-        df_query: pd.DataFrame,
-        field_name: str,
-        threshold: float = 0.1
-    ) -> pl.DataFrame:
-        x = np.stack(df_query[field_name].to_list())
-        return embedding_similarity(
-            query_embds=x,
-            sim_function=sim_index,
-            threshold=threshold,
-            threads=threads,
-            verbose=0
-        )
-    return sim
-
-
-def define_logger() -> logging.Logger:
-    logger = logging.getLogger("AutoHestia")
-    console_handler = logging.StreamHandler()
-    logger_formatter = logging.Formatter(
-        '{message}',
-        style="{",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    console_handler.setFormatter(logger_formatter)
-    # logger.addHandler(console_handler)
-    logger.addHandler(TqdmHandler())
-    return logger
-
-
-def welcome():
-    mssg = f"AutoHestia v.{__version__}\n"
-    mssg += "By Raul Fernandez-Diaz"
-    max_width = max([len(line) for line in mssg.split('\n')])
-    out = "-" * (max_width + 4) + "\n"
-    for line in mssg.split('\n'):
-        out += "| " + line + " " * (max_width - len(line)) + " |\n"
-    out += "-" * (max_width + 4) + "\n"
-    return out
 
 
 class AutoHestia:
@@ -212,24 +35,14 @@ class AutoHestia:
         self,
         df: pd.DataFrame,
         field_name: str,
-        label_name: str,
-        data_type: str = 'molecule',
-        convert_to_smiles: bool = False,
-        device: str = 'cpu',
-        task_type: str = 'classification',
-        algorithms: List[str] = ['ccpart', 'butina'],
-        representation: Union[str, Callable] = 'ecfp-4',
-        eval_model: str = 'svm',
-        outdir: str = 'autohestia_experiment',
-        n_jobs: int = -1,
-        verbose_level: str = "info",
-    ):
-        config = deepcopy(locals())
-        config['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        del config['self'], config['df']
+        x: np.ndarray,
+        y: np.ndarray,
+        sim_dfs: Dict[str, pl.DataFrame],
 
-        # Defining logger
-        self.logger = define_logger()
+        verbose_level: str = 'debug'
+    ):
+        self.logger = define_logger('autohestia')
+
         if verbose_level.lower() == 'debug':
             self.logger.setLevel(logging.DEBUG)
         elif verbose_level.lower() == 'info':
@@ -239,495 +52,163 @@ class AutoHestia:
         else:
             self.logger.setLevel(logging.ERROR)
 
-        self.logger.info(welcome())
-
-        # Input validations
-        if osp.isdir(outdir):
-            self.logger.warning(
-                f"WARNING: Output directory ``{outdir}``"
-                " already exists. Results might be overwritten.\n"
-            )
-        if field_name not in df:
-            raise ValueError(
-                f"""Field name: ``{field_name}`` not present in dataframe.
-                Please double check. Existing columns in df are:
-                ``{', '.join(df.columns.tolist())}``"""
-            )
-        if data_type not in AVAILABLE_METRICS:
-            raise NotImplementedError(
-                MESSAGE_NO_DATA_TYPE.replace(
-                    '[data_type]', data_type
-                )
-            )
-        for algorithm in algorithms:
-            if algorithm not in AVAILABLE_ALGORITHMS:
-                raise NotImplementedError(
-                    MESSAGE_NO_ALGORITHM.replace(
-                        '[algorithm]', algorithm
-                    )
-                )
-
-        # Setting attributes
+        self.logger.info(welcome_autohestia())
+        self.logger.info(
+            f"\nDataset size: {len(df):,}"
+        )
         self.df = df
-        self.field_name = field_name
-        self.label_name = label_name
-        self.data_type = data_type
-        self.rep = representation
-        self.device = device
-        self.task_type = task_type
-        self.eval_model = eval_model
-        self.njobs = n_jobs if n_jobs != -1 else os.cpu_count()
-        self.metrics = self._get_metrics(data_type)
-        self.umap_metrics = UMAP_FPS[self.data_type]
-        self.algorithms = algorithms
-        self.outdir = outdir
-        self.cache = osp.join(self.outdir, "cache")
+        self.x = x
+        self.y = y
+        self.sim_dfs = sim_dfs
+        self.fn = field_name
+        self.task_type = 'c' if len(np.unique(y)) < 10 else 'r'
+        self.metric = None
 
-        # Logging configuration
-        self.logger.info("** AutoHestia configuration: **")
-        self.logger.info(f"Device: {self.device}")
-        self.logger.info(f"Data type: {self.data_type}")
-        self.logger.info(f"Task type: {self.task_type}")
-        self.logger.info(f"Algorithms: {', '.join(self.algorithms)}")
-        self.logger.info(f"Representation: {self.rep}")
-        self.logger.info(f"Evaluation model: {self.eval_model}")
-        self.logger.info(f"Dataset size: {self.df.shape[0]:,} samples")
-        self.logger.info(f"Number of threads: {self.njobs}")
-        self.logger.info("")
-
-        if convert_to_smiles:
-            self.logger.info("** Sequence data detected **")
-            self.logger.info("** Converting to SMILES **")
-            pipe = get_pipeline('to-smiles')
-            self.df['hestia-smiles'] = pipe(
-                self.df[self.field_name].tolist(),
-                n_jobs=n_jobs
+    def plot_good_curves(
+        self,
+        save_dir: str = 'tmp',
+        overwrite: bool = False
+    ):
+        if self.metric is None:
+            raise RuntimeError(
+                "Before computing the plots, first is necessary to run the experiments."
             )
-            self.seq_field_name = self.field_name
-            self.field_name = 'hestia-smiles'
-        elif self.data_type == 'canonical-peptide':
-            pipe = get_pipeline('to-sequences')
-            self.df['hestia-seq'] = pipe(
-                self.df[self.field_name].tolist(),
-                n_jobs=n_jobs
-            )
-            self.seq_field_name = 'hestia-seq'
-        # Save metadata
-        os.makedirs(outdir, exist_ok=True)
-        os.makedirs(osp.join(outdir, 'parts'), exist_ok=True)
-        os.makedirs(osp.join(outdir, "metadata"), exist_ok=True)
-        os.makedirs(osp.join(outdir, 'th-parts'), exist_ok=True)
-        os.makedirs(self.cache, exist_ok=True)
-        config['metrics'] = list(self.metrics.keys())
-        if 'umap' in self.algorithms:
-            config['umap-metrics'] = self.umap_metrics
-        yaml.safe_dump(config, open(osp.join(outdir, "metadata",
-                                             'experiment-config.yml'),
-                                    'w'))
-        df.to_csv(osp.join(outdir, "metadata", "dataset.csv"),
-                  index=True)
+        import seaborn as sns
+        import matplotlib.pyplot as plt
 
-    def run(self, k: int = 3, add_x: Optional[np.ndarray] = None):
-        self.logger.info("** Running AutoHestia **")
-        self.logger.info("1 - Representing data")
-        if self.rep is not None:
-            self.x = self._represent_data()
+        save_dir = Path(save_dir) / "figures"
+        save_dir.mkdir(exist_ok=overwrite)
+        self.raw_experiments['combs'] = self.raw_experiments['part-alg'] + '+' + self.raw_experiments['sim-metric']
+        fig, ax = plt.subplots(figsize=(10, 5))
+        sns.lineplot(
+            self.raw_experiments,
+            x='th',
+            y=self.metric,
+            hue='combs'
+        )
+        plt.legend(bbox_to_anchor=(1, 1), loc='upper left')
+        fig.tight_layout()
+        fig.savefig(save_dir / 'good.png', bbox_inches='tight')
+        return fig
+
+    def best_guardrailed_splits(
+        self,
+        part_algs: Optional[List[str]] = None,
+        custom_algs: Optional[Dict[str, Callable]] = None,
+        top_k_parts: int = 3,
+        top_l_sims: int = 3,
+        min_test_size: float = 0.185,
+        min_dynamic_range: float = 0.4,
+        overwrite: bool = False,
+        save_dir: str = 'tmp'
+    ) -> dict:
+        save_dir = Path(save_dir)
+        save_parts = save_dir / "parts"
+        save_dir.mkdir(exist_ok=overwrite)
+        save_parts.mkdir(exist_ok=overwrite)
+
+        if part_algs is None:
+            part_algs = list(AVAILABLE_ALGORITHMS.keys())
         else:
-            self.x = np.stack(self.df[self.field_name].to_list())
+            for p in part_algs:
+                if p not in AVAILABLE_ALGORITHMS:
+                    raise ValueError(
+                        f"Algorithm {p} not supported.",
+                        f"Please use one of the following: {', '.join(AVAILABLE_ALGORITHMS)}",
+                        "Otherwise declare it as a `custom_algs`."
+                    )
 
-        if add_x is not None:
-            if self.x.shape[0] != add_x.shape[0]:
-                self.logger.error("Shape representations: ", self.x.shape)
-                self.logger.error("Shape `add_x`: ", add_x.shape)
-                raise ValueError("add_x must have the same number of rows as the dataset")
+        algs = deepcopy(AVAILABLE_ALGORITHMS)
+        if custom_algs is not None:
+            algs.update(custom_algs)
 
-            self.x = np.concatenate([self.x, add_x], axis=1)
-
-        self.y = self.df[self.label_name].to_numpy()
-        if self.task_type == 'classification':
-            small_dict = {n: i for i, n in enumerate(np.unique(self.y))}
-            self.y = np.array([small_dict[n] for n in self.y])
-
-        self.logger.info("2 - Prepare and evaluate partitions")
-        results = []
-
-        if 'ccpart' in self.algorithms or 'butina' in self.algorithms:
-            results.extend(self._eval_sim_parts())
-        if 'umap' in self.algorithms:
-            results.extend(self._eval_fp_parts())
-
-        self.logger.info("3 - Save and interpret results")
-        results_df = pd.DataFrame(results)
-        self.metric = 'mcc' if self.task_type == 'classification' else "spcc"
-        results_df = results_df.sort_values(self.metric).reset_index(drop=True)
-        self.logger.info("4 - Check similarity - model perfomance correlation")
-        results2_df = self._check_similarity_correlation(results_df)
-        monotonicity_df = self._monotonicity_summary(results2_df)
-        monotonicity_df = monotonicity_df.sort_values('monotonicity', ascending=False).reset_index(drop=True)
-
-        for (sim, alg), row in monotonicity_df.groupby(['metric', 'part-alg']):
-            mask = (results_df['metric'] == sim) & (results_df['part-alg'] == alg)
-            results_df.loc[mask, 'rank'] = row.index.item() + 1
-            results_df.loc[mask, 'monotonicity'] = row.monotonicity.item()
-        results_df.loc[results_df['rank'].isna(), 'rank'] = k + 1
-
-        results_df = results_df.sort_values('rank', ascending=True).reset_index(drop=True)
-        results_df.to_csv(osp.join(self.outdir, "parts-results.tsv"),
-                          index=False, sep="\t")
-        shutil.copy(osp.join(self.outdir, 'parts', f"{results_df.loc[0, 'part-alg']}-{monotonicity_df.loc[0, 'metric']}.pckl"),
-                    osp.join(self.outdir, 'best-partition.pckl'))
-        shutil.rmtree(self.cache)
-        self.results_df = results_df
-
-        with open(osp.join(self.outdir, 'best-partition.pckl'), 'rb') as f:
-            self.best_part = pickle.load(f)
-
-        return self.best_part
-
-    def _monotonicity_summary(self, results_df: pd.DataFrame):
-        print(results_df)
-        results = []
-        for (sim, alg), r_df in results_df.groupby(['metric', 'part-alg']):
-            corr, p = spearmanr(r_df['th'], r_df[self.metric])
-            results.append({
-                'monotonicity': corr,
-                'metric': sim,
-                'part-alg': alg
-            })
-            self.logger.debug(f'{alg} - {sim} - {corr}')
-        return pd.DataFrame(results)
-
-    def _check_similarity_correlation(self, results_df: pd.DataFrame):
-        best = results_df.iloc[:3, :]
-        model = self._get_model()
-        results = []
-        for (sim, alg), _ in best.groupby(['metric', 'part-alg']):
-            sim_df = pl.read_ipc(osp.join(self.cache, f'{sim}.feather'),
-                                            memory_map=False)
-            hg = HestiaGenerator(
-                data=self.df,
-                verbose=False
+        if len(algs) < top_k_parts:
+            self.logger.warning(
+            (f"top_k_parts ({top_k_parts}) < number of algorithms ({len(algs)}.\n" +
+                f"Defaulting to n algorithms: {len(algs)}")
             )
-            hg.calculate_partitions(
-                partition_algorithm=alg,
-                test_size=0.2,
-                sim_df=sim_df,
-                threshold_step=0.1,
-                valid_size=0.,
-                min_threshold=0.1
+        if len(self.sim_dfs) < top_l_sims:
+            self.logger.warning(
+            (f"top_l_sims ({top_l_sims}) > number of sim metrics ({len(self.sim_dfs)}).\n" +
+                f"Defaulting to n sim-metrics: {len(self.sim_dfs)}")
             )
-            hg.save_precalculated(osp.join(self.outdir, 'th-parts', f'{sim}-{alg}.pckl'))
-            for th, parts in hg.get_partitions(filter=0.185):
-                if th == 'random':
-                    continue
-                mdl = deepcopy(model)
-                self.logger.debug(f'{alg} - {sim} - {th}')
-                mdl.fit(self.x[parts['train']], self.y[parts['train']])
-                if self.task_type == 'classification':
-                    preds = mdl.predict_proba(self.x[parts['test']])[:, 1]
-                else:
-                    preds = mdl.predict(self.x[parts['test']])
-                result = evaluate(
-                    preds, self.y[parts['test']],
-                    pred_task='reg' if 'reg' in self.task_type else 'class'
-                )
-                result['metric'] = sim
-                result['part-alg'] = alg
-                result['th'] = th
-                results.append(result)
-        return pd.DataFrame(results)
-
-    def _eval_sim_parts(self) -> List[dict]:
-        model = self._get_model()
-        pbar = tqdm(self.metrics.items(), total=len(self.metrics),
-                    desc="  Metric")
+        comb = list(product(part_algs, list(self.sim_dfs.keys())))
+        pbar = tqdm(comb, total=len(comb))
         results = []
-
-        for metric_name, metric_func in pbar:
-            pbar.set_description(f"  Sim Mtx - {metric_name}")
-            sim_df = metric_func(
-                df_query=self.df,
-                field_name=self.field_name if 'seq' not in metric_name else self.seq_field_name,
-                threshold=0.1
-            )
-            sim_df.write_ipc(osp.join(self.cache, f'{metric_name}.feather'),
-                             compression='zstd')
-            # CCPart eval
-            if 'ccpart' in self.algorithms:
-                mdl = deepcopy(model)
-                for th in range(10, 100, 10):
-                    cparts = ccpart(
-                        df=self.df,
-                        sim_df=sim_df,
-                        field_name=self.field_name,
-                        label_name=self.label_name,
-                        valid_size=0.0,
-                        test_size=0.2,
-                        threshold=th/100,
-                    )
-                    ccpart_config = {
-                        'th': th / 100
-                    }
-                    cparts = {
-                        'train': np.array(cparts[0]),
-                        'test': np.array(cparts[1])
-                    }
-                    if len(cparts['test']) >= 0.185 * len(self.df):
-                        break
-
-                cparts_file = osp.join(self.outdir, 'parts',
-                                       f'ccpart-{metric_name}.pckl')
-                pickle.dump(cparts, open(cparts_file, 'wb'))
-                if len(cparts['test']) < 0.1 * len(self.df):
-                    results.append({
-                        'metric': metric_name,
-                        'part-alg': 'ccpart',
-                        'part-alg-config': ccpart_config,
-                        'failed': True
-                    })
-                else:
-                    mdl.fit(self.x[cparts['train']], self.y[cparts['train']])
-                    if self.task_type == 'classification':
-                        preds = mdl.predict_proba(self.x[cparts['test']])[:, 1]
-                    else:
-                        preds = mdl.predict(self.x[cparts['test']])
-                    result = evaluate(
-                        preds, self.y[cparts['test']],
-                        pred_task='reg' if 'reg' in self.task_type else 'class'
-                    )
-                    result['metric'] = metric_name
-                    result['part-alg'] = 'ccpart'
-                    result['part-alg-config'] = ccpart_config
-                    result['failed'] = False
-                    results.append(result)
-
-            # Butina eval
-            if 'butina' in self.algorithms:
-                mdl = deepcopy(model)
-
-                for th in range(10, 100, 10):
-                    bparts = butina(
-                        df=self.df,
-                        sim_df=sim_df,
-                        field_name=self.field_name,
-                        label_name=self.label_name,
-                        test_size=0.2,
-                        threshold=th/100,
-                    )
-                    butina_config = {
-                        'th': th / 100
-                    }
-                    bparts = {
-                        'train': np.array(bparts[0]),
-                        'test': np.array(bparts[1])
-                    }
-                    if len(bparts['test']) >= 0.185 * len(self.df):
-                        break
-                bparts_file = osp.join(self.outdir, 'parts',
-                                       f'butina-{metric_name}.pckl')
-                pickle.dump(bparts, open(bparts_file, 'wb'))
-                if len(bparts['test']) < 0.1 * len(self.df):
-                    results.append({
-                        'metric': metric_name,
-                        'part-alg': 'butina',
-                        'part-alg-config': butina_config,
-                        'failed': True
-                    })
-                else:
-                    mdl.fit(self.x[bparts['train']], self.y[bparts['train']])
-                    if self.task_type == 'classification':
-                        preds = mdl.predict_proba(self.x[bparts['test']])[:, 1]
-                    else:
-                        preds = mdl.predict(self.x[bparts['test']])
-                    result = evaluate(
-                        preds, self.y[bparts['test']],
-                        pred_task='reg' if 'reg' in self.task_type else 'class'
-                    )
-                    result['metric'] = metric_name
-                    result['part-alg'] = 'butina'
-                    result['part-alg-config'] = butina_config
-                    result['failed'] = False
-                    results.append(result)
-        return results
-
-    def _eval_fp_parts(self) -> List[dict]:
-        model = self._get_model()
-
-        pbar = tqdm(self.umap_metrics, desc="  FP")
-        results = []
-
-        for metric in pbar:
-            mdl = deepcopy(model)
-            pbar.set_description(f"  FP - {metric}")
-            combs = product(list(range(10, 100, 10)),
-                            list(range(10, 200, 20)),
-                            list(range(10, 100, 10)))
-
-            for (th, n_pcs, n_clus) in combs:
-                parts = umap_original(
+        for part_alg, sim_df in pbar:
+            pbar.set_description(f"{part_alg} - {sim_df}")
+            parts = {}
+            for th in range(10, 110, 10):
+                train, test, clusters = algs[part_alg](
                     df=self.df,
-                    field_name=self.field_name,
-                    label_name=self.label_name,
-                    test_size=0.2,
-                    threshold=th/100,
-                    n_clusters=n_clus,
-                    n_pcs=n_pcs,
-                    radius=int(metric.split('-')[1]),
-                    verbose=0,
-                    bits=1024
+                    sim_df=self.sim_dfs[sim_df],
+                    field_name=self.fn,
+                    threshold=th/100
                 )
-                umap_config = {
-                    'th': th/100,
-                    'n_pcs': n_pcs,
-                    'n_clus': n_clus
-                }
-                parts = {
-                    'train': np.array(parts[0]),
-                    'test': np.array(parts[1])
-                }
-                if len(parts['test']) >= 0.185 * len(self.df):
-                    break
+                if len(test) < min_test_size * len(self.df):
+                    continue
+                parts[th/100] = {'train': train, 'test': test}
+                knn = KNeighborsClassifier() if self.task_type == 'c' else KNeighborsRegressor()
+                knn.fit(self.x[train], self.y[train])
+                preds = knn.predict(self.x[test])
+                result = evaluate(
+                    preds, self.y[test],
+                    pred_task='class' if self.task_type == 'c' else 'reg'
+                )
+                result['th'] = th/100
+                result['part-alg'] = part_alg
+                result['sim-metric'] = sim_df
+                results.append(result)
+            outpath = save_parts / f'{part_alg}-{sim_df}.pckl'
+            pk.dump(parts, outpath.open('wb'))
 
-            parts_file = osp.join(self.outdir, 'parts', f'umap-{metric}.pckl')
-            pickle.dump(parts, open(parts_file, 'wb'))
-            mdl.fit(self.x[parts['train']], self.y[parts['train']])
-            if self.task_type == 'classification':
-                preds = mdl.predict_proba(self.x[parts['test']])
-            else:
-                preds = mdl.predict(self.x[parts['test']])
-            result = evaluate(
-                preds, self.y[parts['test']],
-                pred_task='reg' if 'reg' in self.task_type else 'class'
-            )
-            result['metric'] = metric
-            result['part-alg'] = 'umap'
-            result['part-alg-config'] = umap_config
-            results.append(result)
-        return results
-
-    def _get_metrics(self, data_type: str) -> Dict[str, Callable]:
-        metrics = deepcopy(AVAILABLE_METRICS[data_type])
-        for metric_name, conf in metrics.items():
-            if conf['type'] == 'fp':
-                metrics[metric_name] = _define_mol_sim(
-                    rep=conf['rep']['rep'], radius=conf['rep']['radius'],
-                    nbits=conf['rep']['nbits'], sim_index=conf['sim_index'],
-                    threads=self.njobs
-                )
-            elif conf['type'] == 'lm':
-                metrics[metric_name] = _define_emb_sim(
-                    model=conf['rep']['model'], device=self.device,
-                    sim_index=conf['sim_index'], threads=self.njobs
-                )
-            elif conf['type'] == 'sequence':
-                if conf['method'] == 'mmseqs':
-                    metrics[metric_name] = sequence_similarity_mmseqs
-                else:
-                    raise NotImplementedError(
-                        f"Sequence similarity method "
-                        f"``{conf['method']}`` not implemented."
-                    )
-            elif conf['type'] == 'direct':
-                metrics[metric_name] = _define_tab_sim(
-                    sim_index=conf['sim_index'], threads=self.njobs
-                )
-            else:
-                raise NotImplementedError(
-                    f"Metric type: ``{conf['type']}`` not implemented."
-                )
-        return metrics
-
-    def _represent_data(self):
-        if callable(self.rep):
-            x = self.rep(
-                self.df[self.field_name].tolist()
-            )
-        elif self.rep in PLMs + CLMs:
-            rep_engine = RepEngineLM(
-                model=self.rep,
-            )
-            rep_engine.move_to_device(self.device)
-            x = rep_engine.compute_reps(
-                self.df[self.field_name].tolist(),
-                verbose=self.logger.isEnabledFor(logging.INFO)
-            )
-        elif self.rep.split('-')[0] in FPs:
-            if len(self.rep.split('-')) == 1:
-                self.rep += '-2-1024'
-            elif len(self.rep.split('-')) == 2:
-                self.rep += '-1024'
-
-            rep_engine = RepEngineFP(
-                rep=self.rep.split('-')[0],
-                nbits=int(self.rep.split('-')[2]),
-                radius=int(self.rep.split('-')[1])
-            )
-            x = rep_engine.compute_reps(
-                self.df[self.field_name].tolist()
-            )
-        else:
-            fingerprints_list = ""
+        result_df = pd.DataFrame(results)
+        m_results = []
+        metric = 'mcc' if self.task_type == 'c' else 'spcc'
+        self.metric = metric
+        for (pa, sf), r_df in result_df.groupby(['part-alg', 'sim-metric']):
+            result = {
+                'pa': pa,
+                'sf': sf,
+                'monotonicity': spearmanr(r_df[metric], r_df['th']).statistic,
+                'dynamic_range': r_df['th'].max() - r_df['th'].min(),
+                'mean_perf': r_df[metric].mean()
+            }
+            m_results.append(result)
+        m_df = pd.DataFrame(m_results)
+        m_df = m_df[m_df['dynamic_range'] >= min_dynamic_range].reset_index(drop=True)
+        if len(m_df) < 1:
             raise ValueError(
-                f"Representation: ``{self.rep}`` is not valid. "
-                "It should be either a string "
-                "indicating the fingerprint type or a callable "
-                "function that takes as input the n elements in ``field_name``"
-                "and outputs an n x m np.ndarray where m is the dimensions of "
-                "the representation. "
-                "Available fingerprints are: "
-                "``\n"
-                f"    - {fingerprints_list}"
-                "\n``."
+                "Dataset does not have enough samples after filtering for experiments with",
+                f"dynamic range < {min_dynamic_range}. You may try with a smaller value."
             )
-        return x
-
-    def _get_model(self):
-        if self.eval_model == 'svm':
-            if self.task_type == 'classification':
-                mdl = SVC(class_weight='balanced',
-                          probability=True, kernel='linear')
-            elif self.task_type == 'regression':
-                mdl = SVR(kernel='linear')
-        elif self.eval_model == 'rf':
-            if self.task_type == 'classification':
-                mdl = RandomForestClassifier(
-                    n_jobs=-1, class_weight='balanced'
-                )
-            elif self.task_type == 'regression':
-                mdl = RandomForestRegressor(n_jobs=-1)
-        elif self.eval_model == 'knn':
-            if self.task_type == 'classification':
-                mdl = KNeighborsClassifier(
-                    n_jobs=-1
-                )
-            elif self.task_type == 'regression':
-                mdl = KNeighborsRegressor(
-                    n_jobs=-1
-                )
-        else:
-            raise NotImplementedError(
-                f"Model: ``{self.eval_model}`` is not implemented."
-                "Availabel models: ``svm``, ``rf``, and ``knn``"
-            )
-        return mdl
-
-
-if __name__ == '__main__':
-    df = pd.read_csv(osp.join(
-            osp.dirname(osp.realpath(__file__)),
-            '..', 'tests', 'biogen_logS.csv')
-    )
-    df = df[~df['SMILES'].isna()].reset_index(drop=True)
-    hestia = AutoHestia(
-        # df=df.iloc[:100],
-        df=df,
-        field_name='SMILES',
-        label_name='logS',
-        task_type='regression',
-        device='mps',
-        data_type='molecule',
-        algorithms=['butina', 'ccpart'],
-        representation='ecfp-4',
-        verbose_level='debug'
-    )
-    out = hestia.run()
+        top_k_pa = (
+            m_df.groupby('pa')['mean_perf']
+            .min()
+            .nlargest(top_k_parts)
+            .index
+        )
+        subset = m_df[m_df['pa'].isin(top_k_pa)]
+        subset_top3_sf = (
+            subset.sort_values('mean_perf', ascending=True)
+            .groupby('pa')
+            .head(top_l_sims)
+        )
+        subset_top3_sf.sort_values("monotonicity", inplace=True, ascending=False)
+        subset_top3_sf.reset_index(inplace=True, drop=True)
+        best_parts = pk.load((save_parts / f"{subset.iloc[0, 0]}-{subset.iloc[0, 1]}.pckl").open('rb'))
+        n = {}
+        for k, d in best_parts.items():
+            n[k] = {sk: np.stack(sd) for sk, sd in d.items()}
+        best_parts = n
+        self.raw_experiments = result_df
+        self.raw_experiments.to_csv(save_dir / "raw_experiments.csv", index=False)
+        m_df.to_csv(save_dir / "main_stats.csv", index=False)
+        output = {
+            'raw-experiments': result_df,
+            'main-stats': m_df,
+            'after-guardrail': subset_top3_sf,
+            'top-combination': (subset.iloc[0, 0], subset.iloc[0, 1]),
+            'best-parts': best_parts
+        }
+        return output

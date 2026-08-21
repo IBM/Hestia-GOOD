@@ -13,6 +13,7 @@ from .bulk_similarity_metrics import (
     bulk_mahalanobis, bulk_jensen_shannon, bulk_tanimoto_continuous)
 from .fingerprints import get_fp_function
 
+
 BULK_SIM_METRICS = {
     'cosine-np': bulk_cosine_similarity,
     'tanimoto-np': bulk_np_tanimoto,
