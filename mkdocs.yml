@@ -10,6 +10,7 @@ nav:
   - Similarity reduction: reduction/
   - Clustering algorithms: clustering/
   - Dataset generator: dataset_generator/
+  - AutoHestia: autohestia/
 - Code reference:
   - Dataset generator:
       - dataset_generator.md
@@ -21,6 +22,8 @@ nav:
       - reduction.md
   - Clustering algorithms:
       - clustering.md
+  - AutoHestia:
+      - autohestia.md
 
 markdown_extensions:
   - attr_list
