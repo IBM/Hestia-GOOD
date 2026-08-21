@@ -59,7 +59,7 @@ def test_autohestia():
         verbose_level='debug',
     )
     out = hestia.best_guardrailed_splits(
-        part_algs=['dissimilarity', 'ccpart', 'butina'],
+        part_algs=['maximum_dissimilarity', 'perimeter', 'ccpart', 'butina'],
         save_dir=save_dir, overwrite=True
     )
 
