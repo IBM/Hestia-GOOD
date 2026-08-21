@@ -145,8 +145,6 @@ class AutoHestia:
                     field_name=self.fn,
                     threshold=th/100
                 )
-                if part_alg == 'maximum_dissimilarity':
-                    self.logger.info(f'{th} - {len(train)} - {len(test)}')
                 if len(test) < min_test_size * len(self.df):
                     continue
                 parts[th/100] = {'train': train, 'test': test}
