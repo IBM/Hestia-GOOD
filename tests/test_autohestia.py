@@ -31,6 +31,16 @@ def test_autohestia():
             fingerprint='ecfp', sim_function='tanimoto',
             verbose=0
         ),
+        'ecfp-6-t': molecular_similarity(
+            df, field_name='SMILES',
+            fingerprint='ecfp', sim_function='tanimoto',
+            verbose=0, radius=3
+        ),
+        'ecfp-8-t': molecular_similarity(
+            df, field_name='SMILES',
+            fingerprint='ecfp', sim_function='tanimoto',
+            verbose=0, radius=4
+        ),
         'mapc-4-j': molecular_similarity(
             df, field_name='SMILES',
             fingerprint='mapc', sim_function='jaccard',
@@ -48,7 +58,10 @@ def test_autohestia():
         sim_dfs=sim_dfs,
         verbose_level='debug',
     )
-    out = hestia.best_guardrailed_splits(save_dir=save_dir, overwrite=True)
+    out = hestia.best_guardrailed_splits(
+        part_algs=['dissimilarity', 'ccpart', 'butina'],
+        save_dir=save_dir, overwrite=True
+    )
 
     assert isinstance(out, dict)
     assert 'raw-experiments' in out
