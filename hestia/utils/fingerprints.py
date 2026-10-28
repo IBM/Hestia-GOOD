@@ -24,7 +24,7 @@ def get_fp_function(
 
     if fp == 'scaffold-ecfp':
         fpgen = rdFingerprintGenerator.GetMorganGenerator(
-            radius=radius, fpSize=bits, include_chirality=True
+            radius=radius, fpSize=bits, includeChirality=True
         )
 
         def _get_fp(smile: str):
@@ -44,7 +44,7 @@ def get_fp_function(
 
     elif fp == 'ecfp':
         fpgen = rdFingerprintGenerator.GetMorganGenerator(
-            radius=radius, fpSize=bits, include_chirality=True
+            radius=radius, fpSize=bits, includeChirality=True
         )
 
         def _get_fp(smile: str):
